@@ -57,41 +57,59 @@ Deno.serve(async (req) => {
     if (!rack) return new Response('rack wajib', { status: 400, headers: CORS })
 
     const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
-    const { data: entries, error } = await admin
-      .from('count_entries').select('*').eq('rack', rack).is('uploaded_at', null)
-    if (error) throw error
+
+    // Claim entries atomically: only rows this invocation flips from NULL -> now()
+    // are ours to append. Any entry a concurrent invocation already claimed is
+    // excluded, preventing doubled rows when two phones upload the same rack.
+    const { data: entries, error: claimErr } = await admin
+      .from('count_entries')
+      .update({ uploaded_at: new Date().toISOString() })
+      .eq('rack', rack)
+      .is('uploaded_at', null)
+      .select('*')
+    if (claimErr) throw claimErr
     if (!entries.length) {
       return new Response(JSON.stringify({ uploaded: 0 }), {
         headers: { ...CORS, 'Content-Type': 'application/json' },
       })
     }
 
-    const rows: (string | number)[][] = []
-    for (const e of entries) {
-      for (const u of e.units as { sku: string; variant: string; qty: number }[]) {
-        if (!u.qty || u.qty <= 0) continue
-        rows.push([wib(e.updated_at), e.username, e.rack, e.product_name, u.variant, u.sku, u.qty, e.expired_date ?? ''])
-      }
-    }
-
-    if (rows.length) {
-      const token = await googleToken(Deno.env.get('GOOGLE_SA_EMAIL')!, Deno.env.get('GOOGLE_SA_KEY')!)
-      const sheetId = Deno.env.get('SHEET_ID')!
-      const r = await fetch(
-        `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Log!A1:append?valueInputOption=RAW&insertDataOption=OVERWRITE`,
-        {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ values: rows }),
-        },
-      )
-      if (!r.ok) throw new Error(`sheets append: ${r.status} ${await r.text()}`)
-    }
-
     const ids = entries.map((e) => e.id)
-    const { error: upErr } = await admin
-      .from('count_entries').update({ uploaded_at: new Date().toISOString() }).in('id', ids)
-    if (upErr) throw upErr
+
+    try {
+      const rows: (string | number)[][] = []
+      for (const e of entries) {
+        const units = e.units as { sku: string; variant: string; mult: number; qty: number }[]
+        const qtyUnits = units.filter((u) => u.qty && u.qty > 0)
+        if (qtyUnits.length) {
+          for (const u of qtyUnits) {
+            rows.push([wib(e.updated_at), e.username, e.rack, e.product_name, u.variant, u.sku, u.qty, e.expired_date ?? ''])
+          }
+        } else {
+          // Stok kosong tetap tercatat sebagai satu baris qty 0 (keputusan user).
+          const baseUnit = units.find((u) => u.mult === 1) ?? units[units.length - 1]
+          rows.push([wib(e.updated_at), e.username, e.rack, e.product_name, baseUnit.variant, baseUnit.sku, 0, e.expired_date ?? ''])
+        }
+      }
+
+      if (rows.length) {
+        const token = await googleToken(Deno.env.get('GOOGLE_SA_EMAIL')!, Deno.env.get('GOOGLE_SA_KEY')!)
+        const sheetId = Deno.env.get('SHEET_ID')!
+        const r = await fetch(
+          `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Log!A1:append?valueInputOption=RAW&insertDataOption=OVERWRITE`,
+          {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ values: rows }),
+          },
+        )
+        if (!r.ok) throw new Error(`sheets append: ${r.status} ${await r.text()}`)
+      }
+    } catch (e) {
+      // Rollback the claim so these entries aren't lost — a retry can pick them up.
+      await admin.from('count_entries').update({ uploaded_at: null }).in('id', ids)
+      throw e
+    }
 
     return new Response(JSON.stringify({ uploaded: entries.length }), {
       headers: { ...CORS, 'Content-Type': 'application/json' },
