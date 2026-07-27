@@ -27,7 +27,17 @@ export function useEntries(rack, session) {
     }
     let error
     if (existingId) {
-      ;({ error } = await supabase.from('count_entries').update(payload).eq('id', existingId).is('uploaded_at', null))
+      const { data, error: updErr } = await supabase
+        .from('count_entries')
+        .update(payload)
+        .eq('id', existingId)
+        .is('uploaded_at', null)
+        .select('id')
+      error = updErr
+      if (!error && (!data || data.length === 0)) {
+        await refresh()
+        throw new Error('Entri sudah terkunci (terupload) — hubungi admin')
+      }
     } else {
       ;({ error } = await supabase.from('count_entries').insert({
         ...payload,
