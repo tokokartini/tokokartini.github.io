@@ -35,7 +35,6 @@ export default function Count({ session, username, rack, onChangeRack }) {
   }
 
   function openFromEntry(entry) {
-    if (entry.uploaded_at) return
     const group = groups.find((g) => g.name === entry.product_name)
     if (group) setOpen({ group, entry })
   }
@@ -85,9 +84,9 @@ export default function Count({ session, username, rack, onChangeRack }) {
 
       <div className="card">
         <h3>Hasil rak ini</h3>
-        {!entries.length && <p className="muted">Belum ada.</p>}
-        {entries.map((e) => (
-          <div className={`entry${e.uploaded_at ? ' locked' : ''}`} key={e.id} onClick={() => openFromEntry(e)}>
+        {!openEntries.length && <p className="muted">Belum ada.</p>}
+        {openEntries.map((e) => (
+          <div className="entry" key={e.id} onClick={() => openFromEntry(e)}>
             <span>{e.product_name}</span>
             <span className="qty">{Number(e.qty_total)}</span>
           </div>
