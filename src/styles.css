@@ -1,0 +1,75 @@
+:root {
+  --green: #14532d;
+  --green-dark: #0f3d21;
+  --orange: #f97316;
+  --cream: #faf7f0;
+  --card: #ffffff;
+  --text: #1c1917;
+  --muted: #78716c;
+  --border: #e7e5e4;
+  --error: #b91c1c;
+  --ok: #15803d;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  background: var(--cream);
+  color: var(--text);
+}
+#root { max-width: 560px; margin: 0 auto; padding: 12px; }
+h1 { font-size: 1.25rem; margin: 8px 0 16px; }
+h1 .sub { font-size: 0.75rem; color: var(--muted); font-weight: 400; }
+.card {
+  background: var(--card);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgb(0 0 0 / 0.08);
+}
+input, select {
+  width: 100%;
+  padding: 12px;
+  font-size: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: #fff;
+  margin: 4px 0 12px;
+}
+button {
+  border: 0;
+  border-radius: 12px;
+  padding: 12px 16px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+button.primary { background: var(--green); color: #fff; width: 100%; }
+button.primary:disabled { opacity: 0.6; }
+button.secondary { background: #f5f5f4; color: var(--text); }
+button.link { background: none; color: var(--green); padding: 4px; }
+.badge {
+  background: var(--orange);
+  color: #fff;
+  border-radius: 999px;
+  padding: 2px 12px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+.row { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+.error { color: var(--error); font-size: 0.9rem; }
+.ok { color: var(--ok); font-size: 0.9rem; }
+.center { text-align: center; margin-top: 40vh; color: var(--muted); }
+.muted { color: var(--muted); font-size: 0.85rem; }
+.entry {
+  display: flex; justify-content: space-between; padding: 12px 4px;
+  border-bottom: 1px solid var(--border); cursor: pointer;
+}
+.entry.locked { opacity: 0.55; cursor: default; }
+.entry .qty { font-weight: 700; }
+.unit-row { display: flex; align-items: center; gap: 8px; }
+.unit-row label { flex: 1; }
+.unit-row input { width: 110px; text-align: right; margin: 4px 0; }
+.total { text-align: center; font-size: 2rem; font-weight: 800; color: var(--orange); margin: 8px 0; }
+.actions { display: flex; gap: 8px; }
+.actions button { flex: 1; }
