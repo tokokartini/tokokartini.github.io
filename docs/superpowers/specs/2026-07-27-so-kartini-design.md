@@ -130,3 +130,20 @@ user yang login.
 - Halaman riwayat & badge total.
 - Export CSV dari app.
 - Multi-toko dalam satu app (LabelShop tetap app terpisah).
+
+## Deviasi diterima
+
+- **RLS update policy kolaboratif by design**: policy `update open entries` di
+  `count_entries` mengizinkan **staff mana pun yang login** mengedit entri
+  OPEN (`uploaded_at is null`) milik siapa saja — tidak ada pengecekan
+  `auth.uid() = user_id`. Ini disengaja: tim bisa saling koreksi entri sebelum
+  upload. `uploaded_at` sendiri tidak bisa diset maupun dikosongkan oleh
+  klien — policy mensyaratkan `uploaded_at is null` baik sebelum maupun
+  sesudah update (`using` dan `with check` sama-sama `is null`), jadi kolom
+  itu murni dikendalikan Edge Function via service role key.
+- **Qty 0 tercatat sebagai baris 0 di Log** (keputusan user, 2026-07-27): jika
+  suatu entri stok kosong (tidak ada satuan dengan qty > 0), Edge Function
+  `upload-rak` tetap mengirim satu baris ke Log dengan qty 0, memakai satuan
+  dasar (mult = 1, fallback ke satuan terakhir) — bukan menskip entri
+  tersebut. Alasan: "stok kosong tercatat 0" harus terlihat eksplisit di Log
+  dan Template Olsera, bukan hilang begitu saja.
