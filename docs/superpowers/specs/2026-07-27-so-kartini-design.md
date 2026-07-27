@@ -1,7 +1,10 @@
 # Desain: Stok Opname Kartini
 
 Tanggal: 2026-07-27
-Status: menunggu review user
+Status: disetujui user
+
+- Akun GitHub: `tokokartini` (repo target `tokokartini.github.io`)
+- Supabase project: `https://qfqulgkpbjceizrapyom.supabase.co`
 
 ## Ringkasan
 
