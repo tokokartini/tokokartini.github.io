@@ -72,6 +72,7 @@ export default function Count({ session, username, rack, onChangeRack }) {
 
       {open && (
         <CountForm
+          key={open.entry?.id ?? open.group.name}
           group={open.group}
           initial={open.entry}
           onCancel={() => setOpen(null)}
