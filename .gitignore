@@ -5,3 +5,4 @@ scripts/config.local.json
 scripts/__pycache__
 scripts/.pytest_cache
 .superpowers/
+supabase/.temp/

@@ -22,8 +22,10 @@ REKAP = [
     '=ARRAYFORMULA(IF(A2:A="";"";SUMIF(Log!F:F;A2:A;Log!G:G)))',
 ]
 TEMPLATE = (
-    '=IFERROR(FILTER({Log!A2:A\\Log!D2:D\\Log!E2:E\\Log!F2:F\\Log!G2:G\\Log!C2:C\\Log!H2:H};'
-    'Log!F2:F<>"");"")'
+    '=IFERROR(QUERY({Log!A2:H};'
+    '"select max(Col1), Col4, Col5, Col6, sum(Col7), Col3, max(Col8) '
+    'where Col6<>\'\' group by Col4, Col5, Col6, Col3 '
+    'label max(Col1) \'\', sum(Col7) \'\', max(Col8) \'\'";0);"")'
 )
 
 
