@@ -54,7 +54,15 @@ def main():
     gc = gspread.authorize(creds)
     sh = retry(lambda: gc.open_by_key(SHEET_ID))
 
-    # Note: locale set manually by user during sheet creation (API batch_update locale is unsupported)
+    # Set locale in_ID (Indonesian) before writing formulas (critical: ';' separator depends on it)
+    retry(lambda: sh.batch_update({"requests": [{
+        "updateSpreadsheetProperties": {"properties": {"locale": "in_ID"}, "fields": "locale"}
+    }]}))
+
+    # Verify locale was set
+    props = retry(lambda: sh.fetch_sheet_metadata())["properties"]
+    assert props.get("locale") == "in_ID", f"locale bukan in_ID: {props.get('locale')}"
+    print(f"Locale verified: {props.get('locale')}")
 
     # Setup Log tab
     log = sh.sheet1
