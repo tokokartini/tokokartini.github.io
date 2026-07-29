@@ -1,0 +1,70 @@
+#!/bin/sh
+# Penjaga rahasia. Menolak commit yang memuat kunci atau password asli.
+#
+# Repo ini PUBLIK — apa pun yang ter-commit bisa dibaca siapa saja, dan riwayat
+# Git menyimpannya selamanya walau filenya kemudian dihapus. Hook ini memeriksa
+# isi yang sudah di-"add" sebelum sempat masuk.
+#
+# Kalau ada baris yang sebenarnya aman tapi kena tahan, tambahkan komentar
+# nosecret di baris itu. Kalau benar-benar mendesak: git commit --no-verify
+#
+# Dipasang lewat: git config core.hooksPath .githooks
+
+temuan=0
+
+lapor() {
+  if [ "$temuan" -eq 0 ]; then
+    echo ""
+    echo "  ============================================================"
+    echo "   COMMIT DITAHAN - ada yang mirip rahasia"
+    echo "  ============================================================"
+    echo ""
+  fi
+  temuan=1
+  echo "  [$1] $2"
+  echo "      baris $3"
+  echo ""
+}
+
+berkas=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$berkas" ] && exit 0
+
+for f in $berkas; do
+  # lewati berkas biner
+  git diff --cached --numstat -- "$f" | head -1 | grep -q '^-' && continue
+
+  # isi dengan nomor baris, minus baris yang sengaja ditandai aman
+  isi=$(git show ":$f" 2>/dev/null | grep -n '' | grep -v 'nosecret')
+  [ -z "$isi" ] && continue
+
+  periksa() {
+    hit=$(printf '%s\n' "$isi" | grep -E -- "$1" | head -1 | cut -c1-110)
+    if [ -n "$hit" ]; then lapor "$2" "$f" "$hit"; fi
+  }
+
+  periksa 'sb_secret_[A-Za-z0-9_-]{10,}'                'kunci layanan Supabase'
+  periksa 'sbp_[a-f0-9]{40}'                            'token manajemen Supabase'
+  periksa '[-]{5}BEGIN [A-Z ]*PRIVATE KEY[-]{5}'        'kunci privat'
+  periksa 'eyJ[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.' 'token JWT'
+
+  # Password tertulis langsung. Yang menunjuk ke variabel atau penanda diabaikan.
+  pw=$(printf '%s\n' "$isi" \
+    | grep -iE '(password|passwd|pwd)[[:space:]]*[:=][[:space:]]*["'"'"'][^"'"'"']{6,}["'"'"']' \
+    | grep -viE 'process\.env|os\.environ|getpass|Read-Host|\$env:|<[a-zA-Z_ -]+>|placeholder|contoh|misal' \
+    | head -1 | cut -c1-110)
+  if [ -n "$pw" ]; then lapor 'password tertulis langsung' "$f" "$pw"; fi
+done
+
+if [ "$temuan" -eq 1 ]; then
+  echo "  Yang harus dilakukan:"
+  echo "    - Pindahkan nilainya ke scripts/config.local.json atau .env.local"
+  echo "      (dua berkas itu sudah dikunci di luar repo)."
+  echo "    - Di dokumen, tulis penanda seperti <service_role_key>, bukan nilainya."
+  echo ""
+  echo "  Kalau baris itu memang aman: tambahkan komentar nosecret di baris tsb."
+  echo "  Kalau mendesak dan kamu yakin: git commit --no-verify"
+  echo ""
+  exit 1
+fi
+
+exit 0
