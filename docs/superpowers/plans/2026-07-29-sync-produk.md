@@ -547,6 +547,8 @@ select cron.schedule(
 
 **Service role key tidak boleh ditulis langsung di definisi job** — definisi job bisa dibaca siapa pun yang punya akses `cron.job`. Simpan lewat `alter database postgres set app.service_key = '<service_role_key>'` lebih dulu, lalu gunakan `current_setting` seperti di atas. Verifikasi dengan `select jobname, schedule, active from cron.job;` dan pastikan hasilnya **tidak** memuat kunci mentah.
 
+Kalau `current_setting('app.service_key', true)` mengembalikan kosong saat job berjalan (GUC tingkat database kadang tidak terbawa ke sesi pg_cron), pakai jalur baku Supabase sebagai gantinya: simpan kunci di Vault (`select vault.create_secret('<service_role_key>', 'service_key')`) lalu baca di job dengan `(select decrypted_secret from vault.decrypted_secrets where name = 'service_key')`. Jangan menempuh jalan pintas menuliskan kunci mentah ke definisi job.
+
 - [ ] **Step 6: Uji jalur penjadwal dan buktikan data karyawan utuh**
 
 Jalankan sekali secara manual perintah `net.http_post` yang sama (di luar jadwal), tunggu beberapa detik, lalu periksa `sync_runs` memuat baris baru dengan `source = 'jadwal'` dan `ok = true`.
