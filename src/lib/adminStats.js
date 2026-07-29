@@ -1,6 +1,9 @@
 // Rekap entri untuk dashboard admin. Semua fungsi murni.
 const wibDate = (d) => new Date(d).toLocaleDateString('sv-SE', { timeZone: 'Asia/Jakarta' })
 
+// Kapan entri terakhir disentuh: pakai updated_at kalau lebih baru dari created_at (edit), else created_at.
+const touchedAt = (e) => (e.updated_at && e.updated_at > e.created_at ? e.updated_at : e.created_at)
+
 export function rackProgress(entries, rackNames) {
   const byRack = new Map(rackNames.map((r) => [r, { rack: r, open: 0, uploaded: 0, lastAt: null }]))
   for (const e of entries) {
@@ -8,7 +11,8 @@ export function rackProgress(entries, rackNames) {
     if (!row) continue
     if (e.uploaded_at) row.uploaded++
     else row.open++
-    if (!row.lastAt || e.created_at > row.lastAt) row.lastAt = e.created_at
+    const at = touchedAt(e)
+    if (!row.lastAt || at > row.lastAt) row.lastAt = at
   }
   return [...byRack.values()]
 }
@@ -20,8 +24,9 @@ export function staffActivity(entries, now = new Date()) {
     let row = byUser.get(e.username)
     if (!row) byUser.set(e.username, (row = { username: e.username, today: 0, total: 0, lastAt: null }))
     row.total++
-    if (wibDate(e.created_at) === today) row.today++
-    if (!row.lastAt || e.created_at > row.lastAt) row.lastAt = e.created_at
+    const at = touchedAt(e)
+    if (wibDate(at) === today) row.today++
+    if (!row.lastAt || at > row.lastAt) row.lastAt = at
   }
   return [...byUser.values()].sort((a, b) => (b.lastAt || '').localeCompare(a.lastAt || ''))
 }

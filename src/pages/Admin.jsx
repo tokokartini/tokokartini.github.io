@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { rackProgress, staffActivity, latestEntries } from '../lib/adminStats'
 
@@ -11,10 +11,12 @@ const jam = (iso) =>
 
 async function fetchAllEntries() {
   const all = []
+  const since = new Date(Date.now() - 30 * 86400e3).toISOString()
   for (let page = 0; page < 10; page++) {
     const { data, error } = await supabase
       .from('count_entries')
-      .select('username, rack, product_name, qty_total, created_at, uploaded_at')
+      .select('username, rack, product_name, qty_total, created_at, updated_at, uploaded_at')
+      .gte('created_at', since)
       .order('created_at', { ascending: false })
       .range(page * 1000, page * 1000 + 999)
     if (error) throw error
@@ -58,6 +60,10 @@ export default function Admin({ username }) {
 
   useEffect(() => { load(); loadAccounts() }, [])
 
+  const racksView = useMemo(() => (entries ? rackProgress(entries, racks) : []), [entries, racks])
+  const staff = useMemo(() => (entries ? staffActivity(entries) : []), [entries])
+  const latest = useMemo(() => (entries ? latestEntries(entries) : []), [entries])
+
   async function createAccount(e) {
     e.preventDefault()
     if (newPass.length < 8) { setMsg('err:Password minimal 8 karakter'); return }
@@ -96,8 +102,8 @@ export default function Admin({ username }) {
       {entries !== null && (
         <>
           <div className="card">
-            <h2>Progress rak</h2>
-            {rackProgress(entries, racks).map((r) => (
+            <h2>Progress rak <span className="muted">(30 hari terakhir)</span></h2>
+            {racksView.map((r) => (
               <div className="row" key={r.rack}>
                 <span>{r.rack}</span>
                 <span className="muted">
@@ -111,8 +117,8 @@ export default function Admin({ username }) {
 
           <div className="card">
             <h2>Aktivitas karyawan</h2>
-            {staffActivity(entries).length === 0 && <p className="muted">Belum ada entri</p>}
-            {staffActivity(entries).map((a) => (
+            {staff.length === 0 && <p className="muted">Belum ada entri</p>}
+            {staff.map((a) => (
               <div className="row" key={a.username}>
                 <span>{a.username}</span>
                 <span className="muted">{a.today} hari ini · {a.total} total · terakhir {jam(a.lastAt)}</span>
@@ -122,7 +128,7 @@ export default function Admin({ username }) {
 
           <div className="card">
             <h2>Entri terbaru</h2>
-            {latestEntries(entries).map((e, i) => (
+            {latest.map((e, i) => (
               <div className="row" key={i}>
                 <span>{e.product_name}</span>
                 <span className="muted">{e.qty_total} · {e.rack} · {e.username} · {jam(e.created_at)}</span>
