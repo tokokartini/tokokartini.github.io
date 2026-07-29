@@ -48,6 +48,8 @@ create policy "insert own entries" on count_entries
   for insert to authenticated with check (auth.uid() = user_id and uploaded_at is null);
 create policy "update open entries" on count_entries
   for update to authenticated using (uploaded_at is null) with check (uploaded_at is null);
+create policy "delete open entries" on count_entries
+  for delete to authenticated using (uploaded_at is null);
 
 insert into racks (name, sort) values
   ('Rak 1', 1), ('Rak 2', 2), ('Rak 3', 3), ('Rak 4', 4), ('Rak 5', 5)
