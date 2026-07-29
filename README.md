@@ -5,12 +5,12 @@ Web app stok opname Toko Kartini — https://tokokartini.github.io
 - Frontend: React + Vite, GitHub Pages (deploy otomatis push main).
 - Data: Supabase (`products`, `racks`, `count_entries`) + Edge Functions:
   - `upload-rak` → Google Sheet "SO Toko Kartini":
-    - **Log** = sumber data satu-satunya; jangan dihapus isinya (baris 1 header juga).
-    - **Rekap** & **Template Olsera** = satu hari sesuai kotak tanggal di `Rekap!G1` (kosong = hari ini).
+    - **Log** = sumber data satu-satunya; jangan dihapus baris datanya (tidak ada backup).
+    - **Rekap** & **Template Olsera** = satu hari sesuai kotak tanggal di `Rekap!G1` (kosong = tanggal SO terakhir yang ada di Log — bukan hari ini, karena `Log!A` menyimpan waktu input, dan upload lewat tengah malam bikin "hari ini" sudah ganti sementara SO terakhir masih kemarin).
     - **Arsip Harian** = semua hari (urut tanggal terbaru di atas).
   - `admin-create-user` → bikin akun staff dari halaman admin.
 - Sync produk dari Master Pricelist: `cd scripts; python sync_products.py`.
-- Setup spreadsheet: `cd scripts; python setup_sheet.py` (aman diulang; tidak menulis ke Log jika sudah ada data).
+- Setup spreadsheet: `cd scripts; python setup_sheet.py` (aman diulang di luar jam SO; tidak menulis ke baris data Log kalau sudah ada isi, tapi TETAP menulis ulang header `Log!A1:H1` dan MENGOSONGKAN `Rekap!G1` tiap kali dijalankan — jangan jalankan di tengah sesi SO).
 - Akun staff: login sebagai `admin` → buka halaman Admin (dashboard + form buat akun), isi username & password.
   - Hapus/nonaktifkan akun: tanpa riwayat SO → hapus permanen; ada riwayat SO → nonaktif (SO tetap tersimpan, bisa diaktifkan via **Aktifkan** di baris yang sama); akun `admin` tidak bisa dihapus atau dinonaktifkan.
   - Cadangan: Supabase Dashboard → Authentication → Add user, email `<username>@tokokartini.app`, centang auto-confirm.

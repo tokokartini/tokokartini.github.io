@@ -32,16 +32,20 @@ Deno.serve(async (req) => {
     if (user.email !== ADMIN_EMAIL) return json({ ok: false, error: 'Forbidden' }, 403)
 
     const admin = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
-    const { action, username, password } = await req.json()
+    const { action, username, email, password } = await req.json()
 
-    const semuaUser = async () => {
+    // Kembalikan {ok:false} di 200 kalau listUsers gagal, bukan lempar (yang jadi HTTP 500
+    // dan melanggar kontrak "error level-app selalu 200").
+    const semuaUser = async (): Promise<{ ok: true; users: Awaited<ReturnType<typeof admin.auth.admin.listUsers>>['data']['users'] } | { ok: false; error: string }> => {
       const { data, error } = await admin.auth.admin.listUsers({ page: 1, perPage: 100 })
-      if (error) throw new Error(error.message)
-      return data.users
+      if (error) return { ok: false, error: error.message }
+      return { ok: true, users: data.users }
     }
 
     if (action === 'list') {
-      const users = (await semuaUser())
+      const hasil = await semuaUser()
+      if (!hasil.ok) return json({ ok: false, error: hasil.error })
+      const users = hasil.users
         .map((u) => ({ email: u.email ?? '', created_at: u.created_at, banned: nonaktif(u) }))
         .sort((a, b) => a.email.localeCompare(b.email))
       return json({ ok: true, users })
@@ -54,8 +58,8 @@ Deno.serve(async (req) => {
       const pass = String(password ?? '')
       if (pass.length < 8)
         return json({ ok: false, error: 'Password minimal 8 karakter' })
-      const email = `${uname}@tokokartini.app`
-      const { error } = await admin.auth.admin.createUser({ email, password: pass, email_confirm: true })
+      const emailBaru = `${uname}@tokokartini.app`
+      const { error } = await admin.auth.admin.createUser({ email: emailBaru, password: pass, email_confirm: true })
       if (error) {
         const dup = /already|registered|exists/i.test(error.message)
         return json({ ok: false, error: dup ? 'Username sudah dipakai' : error.message })
@@ -64,11 +68,15 @@ Deno.serve(async (req) => {
     }
 
     if (action === 'deactivate' || action === 'reactivate') {
-      const uname = String(username ?? '').trim().toLowerCase()
-      const email = `${uname}@tokokartini.app`
-      if (email === ADMIN_EMAIL)
+      const targetEmail = String(email ?? '').trim().toLowerCase()
+      if (!targetEmail.endsWith('@tokokartini.app'))
+        return json({ ok: false, error: 'Akun ini tidak dikelola dari sini' })
+      const uname = targetEmail.slice(0, -'@tokokartini.app'.length)
+      if (targetEmail === ADMIN_EMAIL)
         return json({ ok: false, error: 'Akun admin tidak bisa dihapus atau dinonaktifkan' })
-      const target = (await semuaUser()).find((u) => u.email === email)
+      const hasil = await semuaUser()
+      if (!hasil.ok) return json({ ok: false, error: hasil.error })
+      const target = hasil.users.find((u) => u.email === targetEmail)
       if (!target) return json({ ok: false, error: 'Akun tidak ditemukan' })
 
       if (action === 'reactivate') {

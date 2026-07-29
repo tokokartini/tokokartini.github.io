@@ -15,9 +15,16 @@ KEY_PATH = r"C:\Users\COMPUTER\Documents\Claude AI\claude-code-powershel-1427d99
 SHEET_ID = "1uP2ntR00nrstLXKTuCYw1IzWDKohQAKsaq3qeeApDgw"
 
 # locale id_ID: pemisah argumen ';', pemisah kolom array '\'
-# Tanggal efektif = Rekap!G1, kosong berarti hari ini.
-TGL = 'TEXT(IF($G$1="";TODAY();$G$1);"yyyy-mm-dd")'
-TGL_TPL = 'TEXT(IF(Rekap!$G$1="";TODAY();Rekap!$G$1);"yyyy-mm-dd")'
+# Tanggal efektif = Rekap!G1. Log!A menyimpan waktu INPUT, bukan waktu upload —
+# upload lewat tengah malam (lazim di malam akhir bulan) bikin TODAY() sudah
+# ganti hari sementara SO terakhir masih tanggal kemarin. Jadi kosong berarti
+# tanggal terbaru yang ADA di Log, bukan hari ini.
+LATEST_LOG_DATE = (
+    'IFERROR(INDEX(SORT(UNIQUE(FILTER(ARRAYFORMULA(LEFT(Log!A2:A;10));'
+    'Log!A2:A<>""));1;0);1;1);"")'
+)
+TGL = f'IF($G$1="";{LATEST_LOG_DATE};TEXT($G$1;"yyyy-mm-dd"))'
+TGL_TPL = f'IF(Rekap!$G$1="";{LATEST_LOG_DATE};TEXT(Rekap!$G$1;"yyyy-mm-dd"))'
 
 REKAP = [
     f'=IFERROR(SORT(UNIQUE(FILTER(Log!F2:F;Log!F2:F<>"";LEFT(Log!A2:A;10)={TGL})));"")',
@@ -73,8 +80,9 @@ def main():
     gc = gspread.authorize(creds)
     sh = retry(lambda: gc.open_by_key(SHEET_ID))
 
-    # Locale in_ID menentukan pemisah rumus ';'. Zona waktu menentukan TODAY()
-    # — tanpa ini "kosong = hari ini" meleset 7 jam tiap lewat pukul 17:00 WIB.
+    # Locale in_ID menentukan pemisah rumus ';'. Zona waktu Asia/Jakarta tetap
+    # diset untuk penanganan tanggal yang konsisten di sheet ini (TGL/TGL_TPL
+    # sendiri sudah tidak pakai TODAY() lagi, lihat komentar di atas).
     retry(lambda: sh.batch_update({"requests": [{
         "updateSpreadsheetProperties": {
             "properties": {"locale": "in_ID", "timeZone": "Asia/Jakarta"},
@@ -89,15 +97,18 @@ def main():
     assert props.get("timeZone") == "Asia/Jakarta", f"timeZone bukan Asia/Jakarta: {props.get('timeZone')}"
     print(f"TimeZone verified: {props.get('timeZone')}")
 
-    # Setup Log tab
-    log = sh.sheet1
+    # Setup Log tab (cari berdasarkan nama tab, bukan asumsi tab pertama)
+    try:
+        log = retry(lambda: sh.worksheet("Log"))
+    except gspread.exceptions.WorksheetNotFound:
+        log = sh.sheet1
     retry(lambda: log.update_title("Log"))
     retry(lambda: log.update(values=[["Waktu", "Staff", "Rak", "Produk", "Satuan", "SKU", "Qty", "ED"]], range_name="A1:H1"))
 
     # Setup Rekap tab (+ kotak tanggal di F1/G1)
     rekap = get_or_add_worksheet(sh, "Rekap", rows=3000, cols=8)
     retry(lambda: rekap.update(values=[["SKU", "Produk", "Satuan", "Total Qty"]], range_name="A1:D1"))
-    retry(lambda: rekap.update(values=[["Tanggal (kosong = hari ini)"]], range_name="F1"))
+    retry(lambda: rekap.update(values=[["Tanggal (kosong = hari SO terakhir)"]], range_name="F1"))
     retry(lambda: rekap.update(values=[REKAP], range_name="A2:D2", raw=False))
 
     # Setup Template Olsera tab (kolom A:G tetap bersih untuk di-copy ke Olsera)
@@ -106,7 +117,7 @@ def main():
     retry(lambda: tpl.update(values=[[TEMPLATE]], range_name="A2", raw=False))
 
     # Setup Arsip Harian tab (semua hari, tidak ikut berganti saat tanggal berganti)
-    arsip = get_or_add_worksheet(sh, "Arsip Harian", rows=5000, cols=5)
+    arsip = get_or_add_worksheet(sh, "Arsip Harian", rows=50000, cols=5)
     retry(lambda: arsip.update(values=[["Tanggal", "SKU", "Produk", "Satuan", "Total Qty"]], range_name="A1:E1"))
     retry(lambda: arsip.update(values=[[ARSIP]], range_name="A2", raw=False))
 
@@ -120,7 +131,7 @@ def main():
         tanggal_uji = time.strftime("%Y-%m-%d")
         bersihkan_log = True
     else:
-        tanggal_uji = max(r[0][:10] for r in isi_log[1:] if r and r[0])
+        tanggal_uji = max((r[0][:10] for r in isi_log[1:] if r and r[0]), default="")
         bersihkan_log = False
         print(f"Log berisi {len(isi_log) - 1} baris — uji pakai tanggal {tanggal_uji}, Log tidak disentuh")
 
@@ -129,15 +140,28 @@ def main():
 
     cek = retry(lambda: rekap.get_values("A2:D2"))
     print(f"Rekap A2:D2: {cek}")
-    assert cek and cek[0][0] and cek[0][3], f"formula Rekap gagal: {cek}"
     cek2 = retry(lambda: tpl.get_values("A2:G2"))
     print(f"Template A2:G2: {cek2}")
-    assert cek2 and cek2[0][3], f"formula Template gagal: {cek2}"
     cek3 = retry(lambda: arsip.get_values("A2:E2"))
     print(f"Arsip A2:E2: {cek3}")
-    assert cek3 and cek3[0][0] == tanggal_uji, f"formula Arsip gagal: {cek3}"
 
-    # kosongkan kotak tanggal -> Rekap & Template ikut tanggal hari ini
+    if bersihkan_log:
+        # Log ditulis oleh skrip ini sendiri barusan, jadi nilainya diketahui persis —
+        # cek nilai eksak, bukan cuma "ada isi".
+        assert cek and cek[0][:3] == ["TES-1", "Produk Uji", "Pcs"] and cek[0][3] == "5", \
+            f"formula Rekap gagal: {cek}"
+        assert cek2 and len(cek2[0]) > 4 and cek2[0][3] == "TES-1" and cek2[0][4] == "5", \
+            f"formula Template gagal: {cek2}"
+        assert cek3 and len(cek3[0]) > 4 and cek3[0] == [tanggal_uji, "TES-1", "Produk Uji", "Pcs", "5"], \
+            f"formula Arsip gagal: {cek3}"
+    else:
+        # Data asli sudah ada di Log — nilai persisnya tidak diketahui di sini,
+        # jadi cukup pastikan formula menghasilkan sesuatu (bukan kosong/error).
+        assert cek and cek[0][0] and cek[0][3], f"formula Rekap gagal: {cek}"
+        assert cek2 and len(cek2[0]) > 3 and cek2[0][3], f"formula Template gagal: {cek2}"
+        assert cek3 and len(cek3[0]) > 0 and cek3[0][0] == tanggal_uji, f"formula Arsip gagal: {cek3}"
+
+    # kosongkan kotak tanggal -> Rekap & Template ikut tanggal SO terakhir di Log
     retry(lambda: rekap.batch_clear(["G1"]))
     if bersihkan_log:
         retry(lambda: log.batch_clear(["A2:H2"]))

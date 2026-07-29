@@ -72,19 +72,22 @@ export default function Admin({ username }) {
     if (newPass.length < 8) { setMsg('err:Password minimal 8 karakter'); return }
     setBusy(true)
     setMsg('')
-    const { data, error } = await supabase.functions.invoke('admin-create-user', {
-      body: { action: 'create', username: newUser, password: newPass },
-    })
-    if (error || !data?.ok) setMsg(`err:${data?.error || 'Gagal membuat akun — coba lagi'}`)
-    else {
-      setMsg(`ok:Akun ${data.username} jadi — login pakai username '${data.username}'`)
-      setNewUser(''); setNewPass('')
-      loadAccounts()
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-create-user', {
+        body: { action: 'create', username: newUser, password: newPass },
+      })
+      if (error || !data?.ok) setMsg(`err:${data?.error || 'Gagal membuat akun — coba lagi'}`)
+      else {
+        setMsg(`ok:Akun ${data.username} jadi — login pakai username '${data.username}'`)
+        setNewUser(''); setNewPass('')
+        loadAccounts()
+      }
+    } finally {
+      setBusy(false)
     }
-    setBusy(false)
   }
 
-  async function ubahAkun(uname, action) {
+  async function ubahAkun(uname, email, action) {
     if (
       action === 'deactivate' &&
       !window.confirm(
@@ -95,15 +98,18 @@ export default function Admin({ username }) {
     ) return
     setAcctBusy(uname)
     setMsg('')
-    const { data, error } = await supabase.functions.invoke('admin-create-user', {
-      body: { action, username: uname },
-    })
-    if (error || !data?.ok) setMsg(`err:${data?.error || 'Gagal mengubah akun — coba lagi'}`)
-    else if (data.mode === 'deleted') setMsg(`ok:Akun ${uname} dihapus permanen (belum pernah input SO)`)
-    else if (data.mode === 'banned') setMsg(`ok:Akun ${uname} dinonaktifkan — ${data.entries} entri SO tetap tersimpan`)
-    else setMsg(`ok:Akun ${uname} diaktifkan lagi`)
-    await loadAccounts()
-    setAcctBusy('')
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-create-user', {
+        body: { action, email },
+      })
+      if (error || !data?.ok) setMsg(`err:${data?.error || 'Gagal mengubah akun — coba lagi'}`)
+      else if (data.mode === 'deleted') setMsg(`ok:Akun ${uname} dihapus permanen (belum pernah input SO)`)
+      else if (data.mode === 'banned') setMsg(`ok:Akun ${uname} dinonaktifkan — ${data.entries} entri SO tetap tersimpan`)
+      else setMsg(`ok:Akun ${uname} diaktifkan lagi`)
+      await loadAccounts()
+    } finally {
+      setAcctBusy('')
+    }
   }
 
   return (
@@ -194,8 +200,8 @@ export default function Admin({ username }) {
               ) : (
                 <button
                   className="secondary"
-                  disabled={acctBusy === uname}
-                  onClick={() => ubahAkun(uname, u.banned ? 'reactivate' : 'deactivate')}
+                  disabled={!!acctBusy}
+                  onClick={() => ubahAkun(uname, u.email, u.banned ? 'reactivate' : 'deactivate')}
                 >
                   {acctBusy === uname ? '…' : u.banned ? 'Aktifkan' : 'Hapus'}
                 </button>
