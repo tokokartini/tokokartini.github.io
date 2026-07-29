@@ -16,4 +16,5 @@ Web app stok opname Toko Kartini — https://tokokartini.github.io
   - Cadangan: Supabase Dashboard → Authentication → Add user, email `<username>@tokokartini.app`, centang auto-confirm.
   - Cadangan CLI (break-glass): `cd scripts; python create_user.py <username> <password>`.
 - Rak: tabel `racks` di Table Editor.
+- Hasil rak ini (kartu hasil rak): karyawan bisa menghapus entri yang **belum di-upload** (mis. produk ternyata sudah dihitung di rak lain) — datanya dibuang jadi tidak ikut ter-upload. Entri yang **sudah** di-upload terkunci, tidak bisa dihapus dari app; perbaikannya dilakukan langsung di baris tab Log.
 - Spec & plan: `docs/superpowers/`.
