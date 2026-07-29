@@ -502,7 +502,7 @@ await admin.auth.admin.deleteUser(made.user.id)
 
 // admin berhasil
 const a = createClient(URL, ANON)
-await a.auth.signInWithPassword({ email: 'admin@tokokartini.app', password: 'Tokokartini08' })
+await a.auth.signInWithPassword({ email: 'admin@tokokartini.app', password: process.env.SO_ADMIN_PASS })
 const { data: hasil, error: err } = await a.functions.invoke('sync-produk', { body: {} })
 log(!err && hasil?.ok, `sync manual berhasil: ${JSON.stringify(hasil)} ${err?.message || ''}`)
 

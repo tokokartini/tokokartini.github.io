@@ -433,7 +433,7 @@ Run: `npm run build` → Expected: sukses tanpa error.
 
 - [ ] **Step 4: Tes manual di dev server**
 
-Run: `npm run dev` → buka localhost, login `admin` / `Tokokartini08` → dashboard tampil (kartu "Kelola akun" mungkin gagal list karena function belum dideploy — itu diharapkan sampai Task 4). Logout → login `tes` / `TesSO2026!` → alur SO normal.
+Run: `npm run dev` → buka localhost, login `admin` (password ada di catatan pribadi Sopian, jangan ditulis di repo) → dashboard tampil (kartu "Kelola akun" mungkin gagal list karena function belum dideploy — itu diharapkan sampai Task 4). Logout → login akun karyawan uji → alur SO normal.
 
 - [ ] **Step 5: Commit**
 

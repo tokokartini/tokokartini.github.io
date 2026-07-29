@@ -452,7 +452,7 @@ const inv = (c, body) => c.functions.invoke('admin-create-user', { body })
 
 const admin = createClient(URL, ANON)
 const { error: loginErr } = await admin.auth.signInWithPassword({
-  email: 'admin@tokokartini.app', password: 'Tokokartini08',
+  email: 'admin@tokokartini.app', password: process.env.SO_ADMIN_PASS,
 })
 log(!loginErr, `login admin${loginErr ? ': ' + loginErr.message : ''}`)
 
