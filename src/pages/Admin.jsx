@@ -41,6 +41,10 @@ export default function Admin({ username }) {
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
 
+  const [sync, setSync] = useState(null)
+  const [syncBusy, setSyncBusy] = useState(false)
+  const [syncMsg, setSyncMsg] = useState('')
+
   async function load() {
     setLoadErr(false)
     setEntries(null)
@@ -63,7 +67,13 @@ export default function Admin({ username }) {
     else { setAcctErr(false); setAccounts(data.users) }
   }
 
-  useEffect(() => { load(); loadAccounts() }, [])
+  async function loadSync() {
+    const { data } = await supabase
+      .from('sync_runs').select('*').order('ran_at', { ascending: false }).limit(1)
+    setSync(data?.[0] ?? null)
+  }
+
+  useEffect(() => { load(); loadAccounts(); loadSync() }, [])
 
   const racksView = useMemo(() => (entries ? rackProgress(entries, racks) : []), [entries, racks])
   const staff = useMemo(() => (entries ? staffActivity(entries) : []), [entries])
@@ -111,6 +121,19 @@ export default function Admin({ username }) {
       await loadAccounts()
     } finally {
       setAcctBusy('')
+    }
+  }
+
+  async function syncProduk() {
+    setSyncBusy(true)
+    setSyncMsg('')
+    try {
+      const { data, error } = await supabase.functions.invoke('sync-produk', { body: {} })
+      if (error || !data?.ok) setSyncMsg(`err:${data?.error || 'Sync gagal — coba lagi'}`)
+      else setSyncMsg(`ok:${data.total} produk — ${data.added} baru, ${data.deactivated} dinonaktifkan`)
+    } finally {
+      await loadSync()
+      setSyncBusy(false)
     }
   }
 
@@ -172,6 +195,25 @@ export default function Admin({ username }) {
           </div>
         </>
       )}
+
+      <div className="card">
+        <h2>Produk</h2>
+        <p className="muted">
+          {sync
+            ? `terakhir sync: ${jam(sync.ran_at)} (${sync.source}) · ${
+                sync.ok
+                  ? `${sync.total} produk, ${sync.added} baru, ${sync.deactivated} dinonaktifkan`
+                  : `GAGAL — ${sync.error}`
+              }`
+            : 'belum pernah sync'}
+        </p>
+        <button className="secondary" disabled={syncBusy} onClick={syncProduk}>
+          {syncBusy ? 'Menarik data…' : 'Sync produk'}
+        </button>
+        {syncMsg && (
+          <p className={syncMsg.startsWith('ok:') ? 'ok' : 'error'}>{syncMsg.slice(syncMsg.indexOf(':') + 1)}</p>
+        )}
+      </div>
 
       <div className="card">
         <h2>Kelola akun</h2>
