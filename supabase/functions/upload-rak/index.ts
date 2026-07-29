@@ -65,6 +65,7 @@ Deno.serve(async (req) => {
       .from('count_entries')
       .update({ uploaded_at: new Date().toISOString() })
       .eq('rack', rack)
+      .eq('user_id', user.id)
       .is('uploaded_at', null)
       .select('*')
     if (claimErr) throw claimErr

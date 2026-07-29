@@ -4,18 +4,20 @@ import { totalQty } from './convert'
 
 export function useEntries(rack, session) {
   const [entries, setEntries] = useState([])
+  const uid = session.user.id
 
   const refresh = useCallback(async () => {
     const { data, error } = await supabase
       .from('count_entries')
       .select('*')
       .eq('rack', rack)
+      .eq('user_id', uid)
       .order('updated_at', { ascending: false })
       .limit(300)
     if (error) return null
     setEntries(data || [])
     return data || []
-  }, [rack])
+  }, [rack, uid])
 
   useEffect(() => { refresh() }, [refresh])
 
