@@ -56,3 +56,21 @@ create policy "delete open entries" on count_entries
 insert into racks (name, sort) values
   ('Rak 1', 1), ('Rak 2', 2), ('Rak 3', 3), ('Rak 4', 4), ('Rak 5', 5)
 on conflict (name) do nothing;
+
+create table if not exists sync_runs (
+  id bigint generated always as identity primary key,
+  ran_at timestamptz not null default now(),
+  source text not null,
+  ok boolean not null,
+  total int not null default 0,
+  added int not null default 0,
+  deactivated int not null default 0,
+  skipped int not null default 0,
+  error text
+);
+
+create index if not exists sync_runs_ran_at_idx on sync_runs (ran_at desc);
+
+alter table sync_runs enable row level security;
+
+create policy "read sync runs" on sync_runs for select to authenticated using (true);
