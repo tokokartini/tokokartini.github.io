@@ -56,7 +56,20 @@ export default function Count({ session, username, rack, onChangeRack }) {
 
   function openFromEntry(entry) {
     const group = groups.find((g) => g.name === entry.product_name)
-    if (group) setOpen({ group, entry })
+    if (group) { setOpen({ group, entry }); return }
+    // Produk sudah tidak ada di `groups` (mis. dinonaktifkan job malam di tengah
+    // hitungan) -- tanpa fallback ini, baris di "Hasil rak ini" jadi mati: diklik
+    // tidak melakukan apa-apa. Bangun ulang group minimal dari entry.units supaya
+    // entrinya tetap bisa dibuka/diubah/dihapus walau produknya sudah tidak aktif.
+    if (entry.units?.length) {
+      const fallback = {
+        name: entry.product_name,
+        category: '',
+        brand: '',
+        units: entry.units.map((u, i) => ({ ...u, unit_order: i })),
+      }
+      setOpen({ group: fallback, entry })
+    }
   }
 
   async function upload() {

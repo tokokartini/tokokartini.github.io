@@ -106,6 +106,10 @@ function parseMaster(rows: string[][]): { products: Record<string, unknown>[]; s
         sku: u.sku,
         product_name: name,
         variant: u.satuan,
+        // Half-up vs Python round()'s half-to-even: of all integer base/isi pairs up
+        // to 1000, 1.096 disagree by 1 unit in the 4th decimal (e.g. 33/32 -> Python
+        // 1.0312, JS 1.0313; isi is always a multiple of 32 in those cases). Known,
+        // accepted +/-0.0001 divergence from scripts/sync_products.py -- not a bug.
         mult: Math.round(mult * 10000) / 10000,
         unit_order: u.order,
         category: String(row[0] ?? '').trim(),
@@ -120,7 +124,9 @@ function parseMaster(rows: string[][]): { products: Record<string, unknown>[]; s
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
-  let source = ''
+  // 'tidak dikenal' (bukan '') supaya crash SEBELUM autentikasi (env var hilang,
+  // createClient lempar, dst) tetap kebaca di sync_runs -- bukan hilang tanpa jejak.
+  let source = 'tidak dikenal'
   // Dideklarasikan di luar try supaya blok catch bisa mencatat ke sync_runs,
   // tapi DIBUAT di dalam try (bukan sebelum try) supaya env var yang hilang
   // ikut lempar ke catch (CORS + JSON + log), bukan 500 mentah tanpa CORS.
@@ -203,6 +209,26 @@ Deno.serve(async (req) => {
     // --- nonaktifkan SKU aktif yang hilang dari sheet ---
     const diSheet = new Set(products.map((p) => p.sku as string))
     const hilang = existing.filter((p) => p.active && !diSheet.has(p.sku)).map((p) => p.sku)
+
+    // --- pengaman kedua: penonaktifan massal karena sheet berubah manusia ---
+    // Guard di atas (products.length < aktifSekarang / 2) menyasar sheet yang gagal
+    // terbaca separuh -- kegagalan yang realistis hampir tidak pernah terjadi karena
+    // values.get sekali panggil (baik mengembalikan seluruh range atau error). Yang
+    // realistis: pemilik lagi mengedit Master Pricelist, hapus satu blok kategori,
+    // atau sortir ulang baris, sehingga sheet "berhasil" terbaca tapi kekurangan
+    // ratusan SKU. Guard di atas tidak menangkap ini. Asimetri jadwal vs manual:
+    // jadwal jalan jam 3 pagi tanpa yang menunggui -- kalau nonaktif massal salah,
+    // tidak ada yang menyadari sampai besok siang, jadi batalkan langkah ini demi
+    // aman. manual ditekan oleh admin yang melihat hasilnya langsung di layar, jadi
+    // biarkan jalan seperti biasa (respons sudah melaporkan `deactivated`). Upsert di
+    // atas SUDAH jalan di kedua jalur dan sengaja TIDAK di-rollback -- menambah/
+    // memperbarui produk itu tidak berbahaya, cuma nonaktif massal yang berisiko.
+    if (aktifSekarang > 0 && hilang.length > aktifSekarang * 0.1 && source === 'jadwal') {
+      const error = `Dibatalkan: ${hilang.length} produk akan dinonaktifkan (lebih dari 10% dari ${aktifSekarang} aktif). Jalankan Sync produk dari halaman admin kalau memang disengaja.`
+      await db.from('sync_runs').insert({ source, ok: false, total: products.length, added, skipped, error })
+      return json({ ok: false, error })
+    }
+
     for (let i = 0; i < hilang.length; i += 100) {
       const { error } = await db.from('products')
         .update({ active: false }).in('sku', hilang.slice(i, i + 100))
@@ -216,7 +242,11 @@ Deno.serve(async (req) => {
   } catch (e) {
     const pesan = String(e)
     console.error(e)
-    if (source && admin) await admin.from('sync_runs').insert({ source, ok: false, error: pesan })
+    // Penolakan 401/403 biasa `return` langsung di atas (bukan `throw`), jadi tidak
+    // pernah masuk sini -- sengaja tidak dicatat supaya sync_runs tidak kebanjiran.
+    // Tanpa `admin` (createClient sendiri yang gagal) tidak ada cara menulis baris,
+    // jadi itu tetap syarat di sini.
+    if (admin) await admin.from('sync_runs').insert({ source, ok: false, error: pesan })
     return json({ ok: false, error: pesan })
   }
 })

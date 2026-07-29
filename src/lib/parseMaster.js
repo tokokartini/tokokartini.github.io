@@ -60,6 +60,10 @@ export function parseMaster(rows) {
         sku: u.sku,
         product_name: name,
         variant: u.satuan,
+        // Half-up vs Python round()'s half-to-even: of all integer base/isi pairs up
+        // to 1000, 1.096 disagree by 1 unit in the 4th decimal (e.g. 33/32 -> Python
+        // 1.0312, JS 1.0313; isi is always a multiple of 32 in those cases). Known,
+        // accepted +/-0.0001 divergence from scripts/sync_products.py -- not a bug.
         mult: Math.round(mult * 10000) / 10000,
         unit_order: u.order,
         category: String(row[0] ?? '').trim(),

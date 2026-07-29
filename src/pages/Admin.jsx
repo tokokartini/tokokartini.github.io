@@ -5,9 +5,16 @@ import { rackProgress, staffActivity, latestEntries } from '../lib/adminStats'
 const jam = (iso) =>
   iso
     ? new Date(iso).toLocaleString('id-ID', {
-        timeZone: 'Asia/Jakarta', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
+        timeZone: 'Asia/Jakarta', year: 'numeric', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
       })
     : '—'
+
+// Job malam jam 03:00 WIB gagal secara diam-diam kalau seluruh sync_runs kosong
+// atau baris terbarunya sudah lama -- 36 jam kasih jeda lebih dari 24 jam supaya
+// satu malam yang telat/gagal-lalu-berhasil-manual besoknya tidak langsung merah,
+// tapi dua malam berturut-turut gagal pasti kelewat 36 jam.
+const SYNC_STALE_MS = 36 * 3600e3
+const syncStale = (s) => !s || Date.now() - new Date(s.ran_at).getTime() > SYNC_STALE_MS
 
 async function fetchAllEntries() {
   const all = []
@@ -42,6 +49,7 @@ export default function Admin({ username }) {
   const [msg, setMsg] = useState('')
 
   const [sync, setSync] = useState(null)
+  const [syncErr, setSyncErr] = useState(false)
   const [syncBusy, setSyncBusy] = useState(false)
   const [syncMsg, setSyncMsg] = useState('')
 
@@ -68,9 +76,15 @@ export default function Admin({ username }) {
   }
 
   async function loadSync() {
-    const { data } = await supabase
-      .from('sync_runs').select('*').order('ran_at', { ascending: false }).limit(1)
-    setSync(data?.[0] ?? null)
+    setSyncErr(false)
+    try {
+      const { data, error } = await supabase
+        .from('sync_runs').select('*').order('ran_at', { ascending: false }).limit(1)
+      if (error) throw error
+      setSync(data?.[0] ?? null)
+    } catch {
+      setSyncErr(true)
+    }
   }
 
   useEffect(() => { load(); loadAccounts(); loadSync() }, [])
@@ -198,15 +212,19 @@ export default function Admin({ username }) {
 
       <div className="card">
         <h2>Produk</h2>
-        <p className="muted">
-          {sync
-            ? `terakhir sync: ${jam(sync.ran_at)} (${sync.source}) · ${
-                sync.ok
-                  ? `${sync.total} produk, ${sync.added} baru, ${sync.deactivated} dinonaktifkan`
-                  : `GAGAL — ${sync.error}`
-              }`
-            : 'belum pernah sync'}
-        </p>
+        {syncErr && <p className="error">Gagal memuat riwayat sync — coba muat ulang halaman</p>}
+        {!syncErr && (
+          <p className={syncStale(sync) ? 'error' : 'muted'}>
+            {sync
+              ? `terakhir sync: ${jam(sync.ran_at)} (${sync.source}) · ${
+                  sync.ok
+                    ? `${sync.total} produk, ${sync.added} baru, ${sync.deactivated} dinonaktifkan`
+                    : `GAGAL — ${sync.error}`
+                }`
+              : 'belum pernah sync'}
+            {syncStale(sync) ? ' — cek job malam' : ''}
+          </p>
+        )}
         <button className="secondary" disabled={syncBusy} onClick={syncProduk}>
           {syncBusy ? 'Menarik data…' : 'Sync produk'}
         </button>
