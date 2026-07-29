@@ -54,5 +54,23 @@ export function useEntries(rack, session) {
     await refresh()
   }
 
-  return { entries, saveEntry, refresh }
+  async function deleteEntry(id) {
+    const { data, error } = await supabase
+      .from('count_entries')
+      .delete()
+      .eq('id', id)
+      .is('uploaded_at', null)
+      .select('id')
+    if (error) {
+      await refresh()
+      throw new Error('Gagal hapus — cek sinyal, lalu coba lagi')
+    }
+    if (!data || data.length === 0) {
+      await refresh()
+      throw new Error('Entri sudah terkunci (terupload) — tidak bisa dihapus')
+    }
+    await refresh()
+  }
+
+  return { entries, saveEntry, deleteEntry, refresh }
 }

@@ -8,9 +8,11 @@ export default function Count({ session, username, rack, onChangeRack }) {
   const [groups, setGroups] = useState([])
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(null) // { group, entry|null }
-  const { entries, saveEntry, refresh } = useEntries(rack, session)
+  const { entries, saveEntry, deleteEntry, refresh } = useEntries(rack, session)
   const [uploadMsg, setUploadMsg] = useState('')
   const [uploading, setUploading] = useState(false)
+  const [hapusMsg, setHapusMsg] = useState('')
+  const [hapusBusy, setHapusBusy] = useState(0)
 
   useEffect(() => {
     let all = []
@@ -49,6 +51,23 @@ export default function Count({ session, username, rack, onChangeRack }) {
     setUploading(false)
   }
 
+  async function hapusEntri(ev, entry) {
+    ev.stopPropagation()
+    if (!window.confirm(
+      `Hapus "${entry.product_name}" dari ${rack}?\n\n` +
+        'Hitungannya dibuang dan tidak ikut ter-upload.',
+    )) return
+    setHapusBusy(entry.id)
+    setHapusMsg('')
+    try {
+      await deleteEntry(entry.id)
+    } catch (err) {
+      setHapusMsg(`err:${err.message}`)
+    } finally {
+      setHapusBusy(0)
+    }
+  }
+
   return (
     <>
       <div className="card">
@@ -84,11 +103,24 @@ export default function Count({ session, username, rack, onChangeRack }) {
 
       <div className="card">
         <h3>Hasil rak ini</h3>
+        {hapusMsg && (
+          <p className={hapusMsg.startsWith('ok:') ? 'ok' : 'error'}>{hapusMsg.slice(hapusMsg.indexOf(':') + 1)}</p>
+        )}
         {!openEntries.length && <p className="muted">Belum ada.</p>}
         {openEntries.map((e) => (
           <div className="entry" key={e.id} onClick={() => openFromEntry(e)}>
             <span>{e.product_name}</span>
-            <span className="qty">{Number(e.qty_total)}</span>
+            <span className="entry-act">
+              <span className="qty">{Number(e.qty_total)}</span>
+              <button
+                className="hapus"
+                aria-label={`Hapus ${e.product_name}`}
+                disabled={hapusBusy === e.id}
+                onClick={(ev) => hapusEntri(ev, e)}
+              >
+                {hapusBusy === e.id ? '…' : '🗑'}
+              </button>
+            </span>
           </div>
         ))}
         <button className="primary" disabled={uploading || !openEntries.length} onClick={upload} style={{ marginTop: 12 }}>
