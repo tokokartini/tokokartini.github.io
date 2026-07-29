@@ -9,7 +9,11 @@ Web app stok opname Toko Kartini — https://tokokartini.github.io
     - **Rekap** & **Template Olsera** = satu hari sesuai kotak tanggal di `Rekap!G1` (kosong = tanggal SO terakhir yang ada di Log — bukan hari ini, karena `Log!A` menyimpan waktu input, dan upload lewat tengah malam bikin "hari ini" sudah ganti sementara SO terakhir masih kemarin).
     - **Arsip Harian** = semua hari (urut tanggal terbaru di atas).
   - `admin-create-user` → bikin akun staff dari halaman admin.
-- Sync produk dari Master Pricelist: `cd scripts; python sync_products.py`.
+- Sync produk dari Master Pricelist:
+  - Tombol **Sync produk** di halaman admin; jalan juga otomatis tiap malam pukul 03:00 WIB.
+  - Halaman admin menampilkan waktu sync terakhir beserta ringkasannya, termasuk kalau job malam gagal — cek di situ kalau barang baru belum muncul.
+  - `python scripts/sync_products.py` tetap ada sebagai cadangan kalau Edge Function bermasalah.
+  - Pengaman: kalau pembacaan sheet menghasilkan kurang dari separuh jumlah produk aktif, sync dibatalkan dan dicatat gagal — supaya sheet yang bermasalah tidak menonaktifkan seluruh katalog.
 - Setup spreadsheet: `cd scripts; python setup_sheet.py` (aman diulang di luar jam SO; tidak menulis ke baris data Log kalau sudah ada isi, tapi TETAP menulis ulang header `Log!A1:H1` dan MENGOSONGKAN `Rekap!G1` tiap kali dijalankan — jangan jalankan di tengah sesi SO).
 - Akun staff: login sebagai `admin` → buka halaman Admin (dashboard + form buat akun), isi username & password.
   - Hapus/nonaktifkan akun: tanpa riwayat SO → hapus permanen; ada riwayat SO → nonaktif (SO tetap tersimpan, bisa diaktifkan via **Aktifkan** di baris yang sama); akun `admin` tidak bisa dihapus atau dinonaktifkan.
