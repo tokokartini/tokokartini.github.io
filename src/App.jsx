@@ -3,6 +3,7 @@ import { supabase } from './lib/supabase'
 import Login from './pages/Login'
 import Home from './pages/Home'
 import Count from './pages/Count'
+import Admin from './pages/Admin'
 
 export default function App() {
   const [session, setSession] = useState(undefined)
@@ -17,13 +18,15 @@ export default function App() {
   if (session === undefined) return <p className="center">Memuat…</p>
 
   const username = session?.user?.email?.split('@')[0] || ''
+  const isAdmin = username === 'admin'
 
   return (
     <>
       <h1>📦 Stok Opname Kartini <span className="sub">Toko Kartini</span></h1>
       {!session && <Login />}
-      {session && !rack && <Home username={username} onStart={setRack} />}
-      {session && rack && (
+      {session && isAdmin && <Admin username={username} />}
+      {session && !isAdmin && !rack && <Home username={username} onStart={setRack} />}
+      {session && !isAdmin && rack && (
         <Count session={session} username={username} rack={rack} onChangeRack={() => setRack(null)} />
       )}
     </>
