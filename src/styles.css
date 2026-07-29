@@ -68,7 +68,10 @@ button.link { background: none; color: var(--green); padding: 4px; }
 .entry.locked { opacity: 0.55; cursor: default; }
 .entry .qty { font-weight: 700; }
 .entry-act { display: flex; align-items: center; gap: 12px; }
-button.hapus { background: none; color: var(--error); padding: 6px 10px; font-size: 1.15rem; line-height: 1; }
+button.hapus {
+  background: none; color: var(--error); padding: 6px 10px; font-size: 1.15rem; line-height: 1;
+  min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center;
+}
 button.hapus:disabled { opacity: 0.5; }
 .unit-row { display: flex; align-items: center; gap: 8px; }
 .unit-row label { flex: 1; }

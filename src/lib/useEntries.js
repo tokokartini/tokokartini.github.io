@@ -6,13 +6,15 @@ export function useEntries(rack, session) {
   const [entries, setEntries] = useState([])
 
   const refresh = useCallback(async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('count_entries')
       .select('*')
       .eq('rack', rack)
       .order('updated_at', { ascending: false })
       .limit(300)
+    if (error) return null
     setEntries(data || [])
+    return data || []
   }, [rack])
 
   useEffect(() => { refresh() }, [refresh])
@@ -35,8 +37,13 @@ export function useEntries(rack, session) {
         .select('id')
       error = updErr
       if (!error && (!data || data.length === 0)) {
-        await refresh()
-        throw new Error('Entri sudah terkunci (terupload) — hubungi admin')
+        const rows = await refresh()
+        if (rows) {
+          const found = rows.find((r) => r.id === existingId)
+          if (!found) throw new Error('Entri sudah dihapus dari daftar — cek lagi daftarnya')
+          if (found.uploaded_at) throw new Error('Entri sudah terkunci (terupload) — hubungi admin')
+        }
+        throw new Error('Entri sudah tidak bisa diubah — mungkin sudah di-upload atau dihapus. Cek daftarnya.')
       }
     } else {
       ;({ error } = await supabase.from('count_entries').insert({
@@ -66,8 +73,13 @@ export function useEntries(rack, session) {
       throw new Error('Gagal hapus — cek sinyal, lalu coba lagi')
     }
     if (!data || data.length === 0) {
-      await refresh()
-      throw new Error('Entri sudah terkunci (terupload) — tidak bisa dihapus')
+      const rows = await refresh()
+      if (rows) {
+        const found = rows.find((r) => r.id === id)
+        if (!found) throw new Error('Entri sudah dihapus dari daftar — cek lagi daftarnya')
+        if (found.uploaded_at) throw new Error('Entri sudah terkunci (terupload) — tidak bisa dihapus')
+      }
+      throw new Error('Entri sudah tidak bisa dihapus — mungkin sudah di-upload atau dihapus. Cek daftarnya.')
     }
     await refresh()
   }

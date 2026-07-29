@@ -59,7 +59,10 @@ user yang login.
   user_id, rack, sku, qty_total, rincian_satuan (JSON), expired_date (nullable),
   created_at, updated_at, `uploaded_at` (nullable — penanda sudah masuk Sheet).
   RLS: staff boleh insert; boleh **update milik sendiri selama `uploaded_at` masih
-  kosong**; tidak boleh delete.
+  kosong**; tidak boleh delete. (Diganti 2026-07-29: staff sekarang boleh hapus
+  entri terbuka [`uploaded_at is null`] milik siapa pun, menyamai aturan update —
+  lihat `2026-07-29-hapus-entri-rak-design.md` sebagai keputusan yang menggantikan
+  baris ini.)
 - `racks` — daftar rak (nama, urutan, aktif). Read-only untuk staff; admin kelola
   via Dashboard.
 

@@ -44,6 +44,7 @@ export default function Count({ session, username, rack, onChangeRack }) {
   async function upload() {
     setUploading(true)
     setUploadMsg('')
+    setHapusMsg('')
     const { data, error } = await supabase.functions.invoke('upload-rak', { body: { rack } })
     if (error) setUploadMsg('err:Upload gagal — cek sinyal, coba lagi')
     else setUploadMsg(`ok:${data.uploaded} entri tersinkron ke pusat ✓`)
@@ -61,6 +62,7 @@ export default function Count({ session, username, rack, onChangeRack }) {
     setHapusMsg('')
     try {
       await deleteEntry(entry.id)
+      setHapusMsg('ok:Entri dihapus')
     } catch (err) {
       setHapusMsg(`err:${err.message}`)
     } finally {
