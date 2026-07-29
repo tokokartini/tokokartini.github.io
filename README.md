@@ -17,4 +17,7 @@ Web app stok opname Toko Kartini — https://tokokartini.github.io
   - Cadangan CLI (break-glass): `cd scripts; python create_user.py <username> <password>`.
 - Rak: tabel `racks` di Table Editor.
 - Hasil rak ini (kartu hasil rak): karyawan bisa menghapus entri yang **belum di-upload** (mis. produk ternyata sudah dihitung di rak lain) — datanya dibuang jadi tidak ikut ter-upload. Entri yang **sudah** di-upload terkunci, tidak bisa dihapus dari app; perbaikannya dilakukan langsung di baris tab Log.
+- Entri per akun: tiap karyawan hanya melihat, mengubah, menghapus, dan meng-upload hitungannya sendiri (dijaga aturan database RLS, bukan cuma tampilan); admin dashboard tetap menampilkan semua entri dari semua karyawan.
+- Dua karyawan boleh menghitung produk yang sama di rak yang sama — angkanya dijumlahkan di Rekap, Template Olsera, dan Arsip Harian (dikelompokkan per SKU), sementara rincian per orang tetap terlihat di kolom Staff tab Log (contoh: Taxi total 200 — Rian 150, Ichan 50).
+- Peringatan operasional: karena Upload per akun, karyawan yang belum menekan Upload akan menyisakan entri terbuka yang **hanya dia** yang bisa mengirim — datanya tidak hilang (bisa dibuka rak yang sama hari berikutnya dan di-upload), namun akan tidak muncul di laporan sampai itu dilakukan. Cek kartu "Progress rak" di dashboard admin — angka "terbuka" — sebelum menarik laporan.
 - Spec & plan: `docs/superpowers/`.
