@@ -1,19 +1,19 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase } from './supabase'
 import { totalQty } from './convert'
+import { ownEntriesQuery, othersOpenEntriesQuery } from './entryQueries'
 
 export function useEntries(rack, session) {
   const [entries, setEntries] = useState([])
+  const [othersOpen, setOthersOpen] = useState([])
   const uid = session.user.id
 
   const refresh = useCallback(async () => {
-    const { data, error } = await supabase
-      .from('count_entries')
-      .select('*')
-      .eq('rack', rack)
-      .eq('user_id', uid)
-      .order('updated_at', { ascending: false })
-      .limit(300)
+    const [{ data, error }, { data: others, error: othersErr }] = await Promise.all([
+      ownEntriesQuery(supabase, rack, uid),
+      othersOpenEntriesQuery(supabase, rack, uid),
+    ])
+    setOthersOpen(othersErr ? [] : (others || []))
     if (error) return null
     setEntries(data || [])
     return data || []
@@ -86,5 +86,5 @@ export function useEntries(rack, session) {
     await refresh()
   }
 
-  return { entries, saveEntry, deleteEntry, refresh }
+  return { entries, othersOpen, saveEntry, deleteEntry, refresh }
 }

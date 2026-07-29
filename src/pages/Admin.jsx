@@ -16,7 +16,9 @@ async function fetchAllEntries() {
     const { data, error } = await supabase
       .from('count_entries')
       .select('username, rack, product_name, qty_total, created_at, updated_at, uploaded_at')
-      .gte('created_at', since)
+      // Entri terbuka lama (belum di-upload) tidak boleh hilang dari dashboard cuma karena
+      // umurnya lewat 30 hari — kalau begitu, "siapa yang belum upload" jadi tidak terjawab.
+      .or(`created_at.gte.${since},uploaded_at.is.null`)
       .order('created_at', { ascending: false })
       .range(page * 1000, page * 1000 + 999)
     if (error) throw error
@@ -140,7 +142,7 @@ export default function Admin({ username }) {
                 <span className="muted">
                   {r.open + r.uploaded === 0
                     ? 'belum dihitung'
-                    : `${r.open} terbuka · ${r.uploaded} terupload · terakhir ${jam(r.lastAt)}`}
+                    : `${r.open} entri terbuka · ${r.uploaded} terupload · terakhir ${jam(r.lastAt)}`}
                 </span>
               </div>
             ))}
@@ -152,7 +154,9 @@ export default function Admin({ username }) {
             {staff.map((a) => (
               <div className="row" key={a.username}>
                 <span>{a.username}</span>
-                <span className="muted">{a.today} hari ini · {a.total} total · terakhir {jam(a.lastAt)}</span>
+                <span className="muted">
+                  {a.today} hari ini · {a.total} total{a.open > 0 ? ` · ${a.open} belum di-upload` : ''} · terakhir {jam(a.lastAt)}
+                </span>
               </div>
             ))}
           </div>

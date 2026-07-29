@@ -22,8 +22,9 @@ export function staffActivity(entries, now = new Date()) {
   const byUser = new Map()
   for (const e of entries) {
     let row = byUser.get(e.username)
-    if (!row) byUser.set(e.username, (row = { username: e.username, today: 0, total: 0, lastAt: null }))
+    if (!row) byUser.set(e.username, (row = { username: e.username, today: 0, total: 0, open: 0, lastAt: null }))
     row.total++
+    if (!e.uploaded_at) row.open++
     const at = touchedAt(e)
     if (wibDate(at) === today) row.today++
     if (!row.lastAt || at > row.lastAt) row.lastAt = at

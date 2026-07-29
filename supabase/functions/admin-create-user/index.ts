@@ -98,6 +98,24 @@ Deno.serve(async (req) => {
         if (error) return json({ ok: false, error: error.message })
         return json({ ok: true, mode: 'deleted', username: uname, entries: 0 })
       }
+
+      // Upload sekarang per akun: entri terbuka punya akun ini hanya bisa dikirim oleh
+      // akun ini sendiri. Kalau akun dinonaktifkan sementara masih ada entri terbuka,
+      // data itu terdampar — tidak ada yang bisa meng-upload-nya. Tolak dulu, minta
+      // karyawan itu Upload, baru boleh dinonaktifkan.
+      const { count: openCount, error: openErr } = await admin
+        .from('count_entries')
+        .select('id', { count: 'exact', head: true })
+        .eq('user_id', target.id)
+        .is('uploaded_at', null)
+      if (openErr) return json({ ok: false, error: openErr.message })
+      if (openCount) {
+        return json({
+          ok: false,
+          error: `${uname} masih punya ${openCount} entri yang belum di-upload — minta dia Upload dulu, baru akun bisa dinonaktifkan`,
+        })
+      }
+
       const { error } = await admin.auth.admin.updateUserById(target.id, { ban_duration: BAN_SELAMANYA })
       if (error) return json({ ok: false, error: error.message })
       return json({ ok: true, mode: 'banned', username: uname, entries: count })

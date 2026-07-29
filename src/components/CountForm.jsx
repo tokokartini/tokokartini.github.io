@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { totalQty } from '../lib/convert'
 
-export default function CountForm({ group, initial, onSave, onCancel }) {
+export default function CountForm({ group, initial, colleagueHint, onSave, onCancel }) {
   const [units, setUnits] = useState(
     group.units.map((u) => {
       const prev = initial?.units?.find((x) => x.sku === u.sku)
@@ -30,6 +30,7 @@ export default function CountForm({ group, initial, onSave, onCancel }) {
   return (
     <div className="card">
       <h3>{group.name}</h3>
+      {colleagueHint && <p className="muted">{colleagueHint}</p>}
       {units.map((u) => (
         <div className="unit-row" key={u.sku}>
           <label>{u.variant} <span className="muted">×{u.mult}</span></label>

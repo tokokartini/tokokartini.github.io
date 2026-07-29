@@ -8,7 +8,7 @@ export default function Count({ session, username, rack, onChangeRack }) {
   const [groups, setGroups] = useState([])
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(null) // { group, entry|null }
-  const { entries, saveEntry, deleteEntry, refresh } = useEntries(rack, session)
+  const { entries, othersOpen, saveEntry, deleteEntry, refresh } = useEntries(rack, session)
   const [uploadMsg, setUploadMsg] = useState('')
   const [uploading, setUploading] = useState(false)
   const [hapusMsg, setHapusMsg] = useState('')
@@ -29,6 +29,24 @@ export default function Count({ session, username, rack, onChangeRack }) {
 
   const results = useMemo(() => filterGroups(groups, query).slice(0, 20), [groups, query])
   const openEntries = entries.filter((e) => !e.uploaded_at)
+
+  // Peringatan read-only: rekan lain sudah punya entri terbuka untuk produk ini di rak
+  // ini. Cuma tampilan (username + qty_total) — bukan target klik, tidak bisa dibuka/diubah.
+  const othersByProduct = useMemo(() => {
+    const map = new Map()
+    for (const e of othersOpen) {
+      const list = map.get(e.product_name) || []
+      list.push(e)
+      map.set(e.product_name, list)
+    }
+    return map
+  }, [othersOpen])
+
+  function hintFor(productName) {
+    const list = othersByProduct.get(productName)
+    if (!list || !list.length) return null
+    return `sudah dihitung ${list.map((e) => `${e.username}: ${Number(e.qty_total)}`).join(', ')}`
+  }
 
   function openGroup(group) {
     const entry = openEntries.find((e) => e.product_name === group.name) || null
@@ -82,11 +100,18 @@ export default function Count({ session, username, rack, onChangeRack }) {
         )}
         <label>Cari produk</label>
         <input placeholder="ketik nama produk…" value={query} onChange={(e) => setQuery(e.target.value)} />
-        {results.map((g) => (
-          <div className="entry" key={g.name} onClick={() => openGroup(g)}>
-            <span>{g.name}</span><span className="muted">{g.units.length} satuan</span>
-          </div>
-        ))}
+        {results.map((g) => {
+          const hint = hintFor(g.name)
+          return (
+            <div className="entry" key={g.name} onClick={() => openGroup(g)}>
+              <span>
+                {g.name}
+                {hint && <><br /><span className="muted">{hint}</span></>}
+              </span>
+              <span className="muted">{g.units.length} satuan</span>
+            </div>
+          )
+        })}
         {query.trim() && !results.length && <p className="muted">Tidak ada — cek master / minta sync.</p>}
       </div>
 
@@ -95,6 +120,7 @@ export default function Count({ session, username, rack, onChangeRack }) {
           key={open.entry?.id ?? open.group.name}
           group={open.group}
           initial={open.entry}
+          colleagueHint={hintFor(open.group.name)}
           onCancel={() => setOpen(null)}
           onSave={async (units, expired) => {
             await saveEntry(open.group, units, expired, open.entry?.id)

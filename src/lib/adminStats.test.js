@@ -32,16 +32,33 @@ describe('staffActivity', () => {
     const a = staffActivity(entries, now)
     // sari: dua entri, satu di antaranya (Mika DP 7C) jatuh di tanggal WIB hari ini
     const sari = a.find((x) => x.username === 'sari')
-    expect(sari).toEqual({ username: 'sari', today: 1, total: 2, lastAt: '2026-07-28T18:00:00Z' })
+    // sari punya 2 entri: Mentega Simas (sudah terupload) + Mika DP 7C (masih terbuka) -> open: 1
+    expect(sari).toEqual({ username: 'sari', today: 1, total: 2, open: 1, lastAt: '2026-07-28T18:00:00Z' })
   })
 
   it('edit (updated_at > created_at) geser lastAt & hitungan today', () => {
     const a = staffActivity(entries, now)
     const budi = a.find((x) => x.username === 'budi')
     // created_at budi (2026-07-28T09:00Z) bukan hari ini, tapi updated_at (2026-07-29T00:30Z) iya
-    expect(budi).toEqual({ username: 'budi', today: 1, total: 1, lastAt: '2026-07-29T00:30:00Z' })
+    expect(budi).toEqual({ username: 'budi', today: 1, total: 1, open: 1, lastAt: '2026-07-29T00:30:00Z' })
     // karena lastAt budi (habis diedit) lebih baru dari lastAt sari, budi naik ke urutan pertama
     expect(a[0].username).toBe('budi')
+  })
+
+  it('open cuma menghitung entri yang belum di-upload', () => {
+    const a = staffActivity(entries, now)
+    // budi: 1 entri, belum di-upload -> open 1
+    expect(a.find((x) => x.username === 'budi').open).toBe(1)
+    // sari: 2 entri, 1 sudah terupload + 1 belum -> open 1 (bukan 2)
+    expect(a.find((x) => x.username === 'sari').open).toBe(1)
+  })
+
+  it('semua entri sudah terupload -> open 0', () => {
+    const semuaUpload = [
+      { username: 'joko', rack: 'Rak 1', product_name: 'A', qty_total: 1, created_at: '2026-07-28T10:00:00Z', updated_at: null, uploaded_at: '2026-07-28T11:00:00Z' },
+    ]
+    const a = staffActivity(semuaUpload, now)
+    expect(a.find((x) => x.username === 'joko').open).toBe(0)
   })
 })
 
