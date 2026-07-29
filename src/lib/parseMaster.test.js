@@ -25,6 +25,10 @@ describe('parseIsi', () => {
     expect(parseIsi('-')).toBeNull()
     expect(parseIsi('abc')).toBeNull()
   })
+  it('titik-saja jadi null, bukan 0 (beda dari Number(""))', () => {
+    expect(parseIsi('.')).toBeNull()
+    expect(parseIsi('..')).toBeNull()
+  })
 })
 
 describe('parseMaster', () => {
@@ -74,5 +78,68 @@ describe('parseMaster', () => {
       baris({ kategori: 'Mika', merek: 'DP', nama: 'Mika 7C', slots: [['M-1', 'Pack']] }),
     ))
     expect(products[0]).toMatchObject({ category: 'Mika', brand: 'DP', active: true })
+  })
+
+  it('isi 0 dibuang dari perhitungan base (filter Boolean), tapi mult unit itu sendiri tetap dipaksa 1', () => {
+    const { products } = parseMaster(sheet(
+      baris({ nama: 'C', slots: [['C-G', 'Bal'], ['C-1', 'Dus', '0'], ['C-2', 'Pack', '10']] }),
+    ))
+    // base = max(isis dengan filter Boolean) = max(1, 10) = 10 -- isi 0 tidak ikut jadi base.
+    // broken tetap false (0 !== null), tapi C-1 sendiri kena `!u.isi` -> mult 1.
+    expect(products.map((p) => [p.sku, p.mult])).toEqual([
+      ['C-G', 10],
+      ['C-1', 1],
+      ['C-2', 1],
+    ])
+  })
+
+  it('hanya baca dari index 2 -- dua baris pertama dibuang meski berisi produk valid', () => {
+    const asli = [
+      baris({ nama: 'Baris0', slots: [['B0-1', 'Pcs']] }),
+      baris({ nama: 'Baris1', slots: [['B1-1', 'Pcs']] }),
+      baris({ nama: 'Baris2', slots: [['B2-1', 'Pcs']] }),
+    ]
+    const { products } = parseMaster(asli)
+    expect(products.map((p) => p.sku)).toEqual(['B2-1'])
+  })
+
+  it('semua 4 slot satuan (termasuk kolom 30/10/9 dan 31/12/11) terbaca dengan urutan benar', () => {
+    const { products } = parseMaster(sheet(
+      baris({ nama: 'Multi', slots: [
+        ['S0', 'Bal'],
+        ['S1', 'Pack', '10'],
+        ['S2', 'Dus', '50'],
+        ['S3', 'Pcs', '100'],
+      ] }),
+    ))
+    expect(products.map((p) => [p.sku, p.variant, p.unit_order]))
+      .toEqual([
+        ['S0', 'Bal', 0],
+        ['S1', 'Pack', 1],
+        ['S2', 'Dus', 2],
+        ['S3', 'Pcs', 3],
+      ])
+  })
+
+  it('baris lebih pendek dari 32 kolom dipadatkan (Sheets API tidak memadatkan baris seperti gspread)', () => {
+    const pendek = []
+    pendek[0] = 'Bahan'
+    pendek[2] = 'X'
+    pendek[3] = 'Ringkas'
+    pendek[6] = 'Bal'
+    pendek[28] = 'R-1'
+    expect(pendek.length).toBeLessThan(32)
+    const { products } = parseMaster([kosong(), kosong(), pendek])
+    expect(products).toHaveLength(1)
+    expect(products[0]).toMatchObject({
+      sku: 'R-1', variant: 'Bal', category: 'Bahan', brand: 'X', product_name: 'Ringkas',
+    })
+  })
+
+  it('mult dibulatkan 4 desimal (20/3 = 6.6667)', () => {
+    const { products } = parseMaster(sheet(
+      baris({ nama: 'B', slots: [['B-G', 'Bal'], ['B-1', 'Dus', '20'], ['B-2', 'Pack', '3']] }),
+    ))
+    expect(products.find((p) => p.sku === 'B-2').mult).toBe(6.6667)
   })
 })

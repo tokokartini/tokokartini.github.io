@@ -54,7 +54,12 @@ const UNIT_SLOTS: [number, number, number | null][] = [[28, 6, null], [29, 8, 7]
 function parseIsi(raw: unknown): number | null {
   const s = String(raw ?? '').trim()
   if (!s || s === '-') return null
-  const n = Number(s.replace(/\./g, '').replace(',', '.'))
+  const cleaned = s.replace(/\./g, '').replace(',', '.')
+  // Python's float("") raises ValueError -> None; JS's Number("") is 0 (finite),
+  // so an all-dot input like "." (thousands-sep stripped to "") must be rejected
+  // explicitly or it would wrongly parse as 0 instead of null.
+  if (!cleaned) return null
+  const n = Number(cleaned)
   return Number.isFinite(n) ? n : null
 }
 
@@ -103,11 +108,19 @@ function parseMaster(rows: string[][]): { products: Record<string, unknown>[]; s
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
 
-  const service = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-  const admin = createClient(Deno.env.get('SUPABASE_URL')!, service)
   let source = ''
+  // Dideklarasikan di luar try supaya blok catch bisa mencatat ke sync_runs,
+  // tapi DIBUAT di dalam try (bukan sebelum try) supaya env var yang hilang
+  // ikut lempar ke catch (CORS + JSON + log), bukan 500 mentah tanpa CORS.
+  let admin: ReturnType<typeof createClient> | undefined
 
   try {
+    const service = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    admin = createClient(Deno.env.get('SUPABASE_URL')!, service)
+    // Alias non-undefined: hindari mengandalkan TS control-flow narrowing di
+    // seluruh try block (tidak bisa dicek dengan `deno check` di lingkungan ini).
+    const db = admin
+
     // --- autentikasi dua jalur ---
     const auth = req.headers.get('Authorization') ?? ''
     const token = auth.replace(/^Bearer\s+/i, '')
@@ -128,7 +141,9 @@ Deno.serve(async (req) => {
     const gToken = await googleToken(Deno.env.get('GOOGLE_SA_EMAIL')!, Deno.env.get('GOOGLE_SA_KEY')!)
     const sheetId = Deno.env.get('MASTER_SHEET_ID')!
     const r = await fetch(
-      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(TAB)}`,
+      // Single-quote the tab title in the A1 range per Google's recommendation
+      // for sheet titles containing spaces.
+      `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(`'${TAB}'`)}`,
       { headers: { Authorization: `Bearer ${gToken}` } },
     )
     if (!r.ok) throw new Error(`sheets read: ${r.status} ${await r.text()}`)
@@ -137,21 +152,30 @@ Deno.serve(async (req) => {
     const { products, skipped } = parseMaster(rows)
 
     // --- SKU yang sudah ada, untuk hitung "baru" dan menentukan yang dinonaktifkan ---
+    // .order('sku') wajib: LIMIT/OFFSET tanpa urutan tetap bisa melompati atau
+    // mengulang baris kalau ada tulisan lain di antara pengambilan halaman (tombol
+    // manual dan jadwal malam bisa tumpang tindih) — SKU aktif yang terlompati
+    // tidak akan pernah dinonaktifkan dan salah dihitung sebagai "added".
     const existing: { sku: string; active: boolean }[] = []
+    let habisTerbaca = false
     for (let page = 0; page < 20; page++) {
-      const { data, error } = await admin.from('products')
-        .select('sku, active').range(page * 1000, page * 1000 + 999)
+      const { data, error } = await db.from('products')
+        .select('sku, active').order('sku').range(page * 1000, page * 1000 + 999)
       if (error) throw new Error(error.message)
       existing.push(...data)
-      if (data.length < 1000) break
+      if (data.length < 1000) { habisTerbaca = true; break }
     }
+    // Kalau 20 halaman penuh habis tanpa pernah menemukan halaman terakhir yang
+    // kurang dari 1000 baris, daftar SKU yang ada kemungkinan terpotong diam-diam
+    // — lebih baik gagal jelas daripada under-deactivate tanpa sinyal.
+    if (!habisTerbaca) throw new Error('Terlalu banyak produk (>20000): halaman SKU kemungkinan terpotong')
     const adaSku = new Set(existing.map((p) => p.sku))
     const aktifSekarang = existing.filter((p) => p.active).length
 
     // --- pengaman: jangan pernah menonaktifkan massal karena pembacaan gagal ---
     if (aktifSekarang > 0 && products.length < aktifSekarang / 2) {
       const error = `Dibatalkan: sheet hanya menghasilkan ${products.length} produk, sedangkan sekarang ada ${aktifSekarang} produk aktif. Cek Master Pricelist.`
-      await admin.from('sync_runs').insert({ source, ok: false, total: products.length, skipped, error })
+      await db.from('sync_runs').insert({ source, ok: false, total: products.length, skipped, error })
       return json({ ok: false, error })
     }
 
@@ -159,7 +183,7 @@ Deno.serve(async (req) => {
 
     // --- upsert bertahap ---
     for (let i = 0; i < products.length; i += 500) {
-      const { error } = await admin.from('products')
+      const { error } = await db.from('products')
         .upsert(products.slice(i, i + 500), { onConflict: 'sku' })
       if (error) throw new Error(error.message)
     }
@@ -168,18 +192,19 @@ Deno.serve(async (req) => {
     const diSheet = new Set(products.map((p) => p.sku as string))
     const hilang = existing.filter((p) => p.active && !diSheet.has(p.sku)).map((p) => p.sku)
     for (let i = 0; i < hilang.length; i += 100) {
-      const { error } = await admin.from('products')
+      const { error } = await db.from('products')
         .update({ active: false }).in('sku', hilang.slice(i, i + 100))
       if (error) throw new Error(error.message)
     }
 
-    await admin.from('sync_runs').insert({
+    await db.from('sync_runs').insert({
       source, ok: true, total: products.length, added, deactivated: hilang.length, skipped,
     })
     return json({ ok: true, total: products.length, added, deactivated: hilang.length, skipped })
   } catch (e) {
     const pesan = String(e)
-    if (source) await admin.from('sync_runs').insert({ source, ok: false, error: pesan })
+    console.error(e)
+    if (source && admin) await admin.from('sync_runs').insert({ source, ok: false, error: pesan })
     return json({ ok: false, error: pesan })
   }
 })

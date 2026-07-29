@@ -8,7 +8,12 @@ const UNIT_SLOTS = [[28, 6, null], [29, 8, 7], [30, 10, 9], [31, 12, 11]]
 export function parseIsi(raw) {
   const s = String(raw ?? '').trim()
   if (!s || s === '-') return null
-  const n = Number(s.replace(/\./g, '').replace(',', '.'))
+  const cleaned = s.replace(/\./g, '').replace(',', '.')
+  // Python's float("") raises ValueError -> None; JS's Number("") is 0 (finite),
+  // so an all-dot input like "." (thousands-sep stripped to "") must be rejected
+  // explicitly or it would wrongly parse as 0 instead of null.
+  if (!cleaned) return null
+  const n = Number(cleaned)
   return Number.isFinite(n) ? n : null
 }
 
