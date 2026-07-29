@@ -32,6 +32,8 @@ export default function Admin({ username }) {
   const [loadErr, setLoadErr] = useState(false)
 
   const [accounts, setAccounts] = useState([])
+  const [acctErr, setAcctErr] = useState(false)
+  const [acctBusy, setAcctBusy] = useState('')
   const [newUser, setNewUser] = useState('')
   const [newPass, setNewPass] = useState('')
   const [busy, setBusy] = useState(false)
@@ -55,7 +57,8 @@ export default function Admin({ username }) {
 
   async function loadAccounts() {
     const { data, error } = await supabase.functions.invoke('admin-create-user', { body: { action: 'list' } })
-    if (!error && data?.ok) setAccounts(data.users)
+    if (error || !data?.ok) { setAcctErr(true); setAccounts([]) }
+    else { setAcctErr(false); setAccounts(data.users) }
   }
 
   useEffect(() => { load(); loadAccounts() }, [])
@@ -79,6 +82,28 @@ export default function Admin({ username }) {
       loadAccounts()
     }
     setBusy(false)
+  }
+
+  async function ubahAkun(uname, action) {
+    if (
+      action === 'deactivate' &&
+      !window.confirm(
+        `Hapus akun "${uname}"?\n\n` +
+          'Kalau akun ini belum pernah input SO, akun dihapus permanen.\n' +
+          'Kalau sudah pernah input, akun hanya dinonaktifkan — entri SO-nya tetap tersimpan.',
+      )
+    ) return
+    setAcctBusy(uname)
+    setMsg('')
+    const { data, error } = await supabase.functions.invoke('admin-create-user', {
+      body: { action, username: uname },
+    })
+    if (error || !data?.ok) setMsg(`err:${data?.error || 'Gagal mengubah akun — coba lagi'}`)
+    else if (data.mode === 'deleted') setMsg(`ok:Akun ${uname} dihapus permanen (belum pernah input SO)`)
+    else if (data.mode === 'banned') setMsg(`ok:Akun ${uname} dinonaktifkan — ${data.entries} entri SO tetap tersimpan`)
+    else setMsg(`ok:Akun ${uname} diaktifkan lagi`)
+    await loadAccounts()
+    setAcctBusy('')
   }
 
   return (
@@ -153,12 +178,31 @@ export default function Admin({ username }) {
           <p className={msg.startsWith('ok:') ? 'ok' : 'error'}>{msg.slice(msg.indexOf(':') + 1)}</p>
         )}
         <h2>Akun terdaftar</h2>
-        {accounts.map((u) => (
-          <div className="row" key={u.email}>
-            <span>{u.email.split('@')[0]}</span>
-            <span className="muted">dibuat {u.created_at?.slice(0, 10)}</span>
-          </div>
-        ))}
+        {acctErr && <p className="error">Gagal memuat daftar akun — coba muat ulang halaman</p>}
+        {!acctErr && accounts.length === 0 && <p className="muted">Belum ada akun</p>}
+        {accounts.map((u) => {
+          const uname = u.email.split('@')[0]
+          const barisAdmin = u.email === 'admin@tokokartini.app'
+          return (
+            <div className="row" key={u.email}>
+              <span>
+                {uname}
+                {u.banned && <span className="muted"> · nonaktif</span>}
+              </span>
+              {barisAdmin ? (
+                <span className="muted">akun admin</span>
+              ) : (
+                <button
+                  className="secondary"
+                  disabled={acctBusy === uname}
+                  onClick={() => ubahAkun(uname, u.banned ? 'reactivate' : 'deactivate')}
+                >
+                  {acctBusy === uname ? '…' : u.banned ? 'Aktifkan' : 'Hapus'}
+                </button>
+              )}
+            </div>
+          )
+        })}
       </div>
     </>
   )
