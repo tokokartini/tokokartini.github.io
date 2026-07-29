@@ -24,6 +24,11 @@ export function parseMaster(rows) {
   let dupes = 0
   for (const raw of rows.slice(2)) {
     const row = [...raw]
+    // Mirrors scripts/sync_products.py:34 (`row = list(raw) + [""] * (32 - len(raw))`),
+    // where the padding is load-bearing: Python raises IndexError on a short list.
+    // In JS every field read below goes through `row[i] ?? ''`, so an out-of-bounds
+    // read already returns '' and this loop is defensive-only (dead for behavior)
+    // here. Keep it anyway so this stays a faithful mirror of the Python authority.
     while (row.length < 32) row.push('')
     const name = String(row[3] ?? '').trim()
     if (!name || String(row[0] ?? '').trim().startsWith('===')) continue
@@ -37,6 +42,13 @@ export function parseMaster(rows) {
       units.push({ sku, satuan, isi, order })
     })
     if (!units.length) continue
+    // filter(Boolean) mirrors scripts/sync_products.py:51's `if u["isi"]` truthy
+    // filter. It is provably unobservable in this algorithm: a null isi only
+    // appears when broken=true (every mult below gets forced to 1, so base is
+    // never used), and 0 can only win Math.max when every isi in the row is 0 --
+    // in which case every unit takes the `!u.isi` branch anyway, again bypassing
+    // base. Kept for exact fidelity with the Python reference, not because
+    // removing it would change any output.
     const isis = units.map((u) => u.isi).filter(Boolean)
     const base = isis.length ? Math.max(...isis) : 1
     const broken = units.some((u) => u.isi === null)

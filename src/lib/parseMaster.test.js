@@ -80,12 +80,16 @@ describe('parseMaster', () => {
     expect(products[0]).toMatchObject({ category: 'Mika', brand: 'DP', active: true })
   })
 
-  it('isi 0 dibuang dari perhitungan base (filter Boolean), tapi mult unit itu sendiri tetap dipaksa 1', () => {
+  it('isi 0 memaksa mult unit itu sendiri jadi 1 lewat cabang `!u.isi`, walau broken tetap false', () => {
     const { products } = parseMaster(sheet(
       baris({ nama: 'C', slots: [['C-G', 'Bal'], ['C-1', 'Dus', '0'], ['C-2', 'Pack', '10']] }),
     ))
-    // base = max(isis dengan filter Boolean) = max(1, 10) = 10 -- isi 0 tidak ikut jadi base.
-    // broken tetap false (0 !== null), tapi C-1 sendiri kena `!u.isi` -> mult 1.
+    // broken tetap false (0 !== null, bukan null) -- tapi C-1 sendiri kena `!u.isi`
+    // (0 falsy) -> mult dipaksa 1, terlepas dari broken.
+    // Catatan: ini TIDAK memin `isis.filter(Boolean)` (baris di parseMaster.js yang
+    // membuang isi 0 dari base). filter(Boolean) provably tidak berpengaruh ke
+    // output di sini -- lihat komentarnya di parseMaster.js -- jadi bukan sesuatu
+    // yang bisa/perlu dipin oleh test manapun.
     expect(products.map((p) => [p.sku, p.mult])).toEqual([
       ['C-G', 10],
       ['C-1', 1],
@@ -121,7 +125,7 @@ describe('parseMaster', () => {
       ])
   })
 
-  it('baris lebih pendek dari 32 kolom dipadatkan (Sheets API tidak memadatkan baris seperti gspread)', () => {
+  it('baris pendek dari Sheets API mentah (bukan gspread, yang selalu padding 32) tetap terparse benar', () => {
     const pendek = []
     pendek[0] = 'Bahan'
     pendek[2] = 'X'
@@ -134,6 +138,13 @@ describe('parseMaster', () => {
     expect(products[0]).toMatchObject({
       sku: 'R-1', variant: 'Bal', category: 'Bahan', brand: 'X', product_name: 'Ringkas',
     })
+    // Catatan: ini memverifikasi baris pendek (lebar 1, seperti yang benar-benar
+    // dikembalikan Sheets API untuk baris data pertama) tetap terparse benar. Ini
+    // TIDAK memin baris `while (row.length < 32) row.push('')` itu sendiri -- di JS
+    // setiap akses field sudah lewat `row[i] ?? ''` yang aman untuk index di luar
+    // batas, jadi loop itu dead-for-behavior di sini (lihat komentarnya di
+    // parseMaster.js). Loop-nya tetap dipertahankan supaya persis mencerminkan
+    // scripts/sync_products.py, tempat padding itu justru load-bearing.
   })
 
   it('mult dibulatkan 4 desimal (20/3 = 6.6667)', () => {
