@@ -32,9 +32,9 @@ create table if not exists count_entries (
   uploaded_at timestamptz
 );
 
--- satu entri terbuka per produk per rak
+-- satu entri terbuka per produk per rak per orang
 create unique index if not exists count_entries_open_unique
-  on count_entries (rack, product_name) where uploaded_at is null;
+  on count_entries (rack, product_name, user_id) where uploaded_at is null;
 create index if not exists count_entries_rack_idx on count_entries (rack, uploaded_at);
 
 alter table products enable row level security;
@@ -47,9 +47,11 @@ create policy "read entries" on count_entries for select to authenticated using 
 create policy "insert own entries" on count_entries
   for insert to authenticated with check (auth.uid() = user_id and uploaded_at is null);
 create policy "update open entries" on count_entries
-  for update to authenticated using (uploaded_at is null) with check (uploaded_at is null);
+  for update to authenticated
+  using (uploaded_at is null and auth.uid() = user_id)
+  with check (uploaded_at is null and auth.uid() = user_id);
 create policy "delete open entries" on count_entries
-  for delete to authenticated using (uploaded_at is null);
+  for delete to authenticated using (uploaded_at is null and auth.uid() = user_id);
 
 insert into racks (name, sort) values
   ('Rak 1', 1), ('Rak 2', 2), ('Rak 3', 3), ('Rak 4', 4), ('Rak 5', 5)
