@@ -98,6 +98,30 @@ sheet sebaiknya dijalankan **setelah** deploy, atau diulang setelah upload terak
 - Konversi: dijalankan dengan backup tab lebih dulu; hasilnya dibandingkan manual di sheet sebelum
   backup dihapus
 
+## Tambahan saat pengerjaan: tab Rekap ternyata salah hitung
+
+Setelah konversi jalan, `Rekap` menulis 75 untuk dua SKU berbeda yang seharusnya 75 dan 22 —
+sementara `Template Olsera` dan `Arsip Harian` benar. Sebabnya bukan konversi: kolom `Total Qty`
+memakai `ARRAYFORMULA(IF(A2:A="";"";SUMIFS(...;Log!F:F;A2:A;...)))`, dan **`SUMIFS` tidak ter-vektor
+di dalam `ARRAYFORMULA`** — tiap baris ikut hasil baris pertama. Diuji di tab sementara: `SUMIFS`
+satu baris untuk `PKG-0094-3` mengembalikan 22 yang benar, jadi datanya memang tidak salah.
+
+Bug ini ada sejak `setup_sheet.py` ditulis (2026-07-27) dan tidak pernah kelihatan karena tak ada
+yang membandingkan angka Rekap dengan Log baris per baris.
+
+Perbaikannya: keempat kolom Rekap diganti **satu** `QUERY` (pola yang sama dengan `Arsip Harian`,
+yang sejak awal benar), lalu `B2:D2` dikosongkan:
+
+```
+=IFERROR(QUERY({Log!A2:H};"select Col6, Col4, Col5, sum(Col7)
+ where Col6<>'' and Col1 starts with '"&<TGL>&"' group by Col6, Col4, Col5
+ order by Col6 label sum(Col7) ''";0);"")
+```
+
+`setup_sheet.py` dan sheet live sudah sama-sama diperbarui. `Rekap!G1` tidak tersentuh (dicek
+sebelum dan sesudah), dan kotak tanggalnya masih jalan: `2026-07-29` → 138 baris, kosong → hari SO
+terakhir.
+
 ## Di luar lingkup
 
 Struktur tab lain, format kolom, dan kemampuan mengoreksi hasil dengan tangan di sheet. Penyebab

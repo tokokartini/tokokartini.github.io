@@ -26,12 +26,19 @@ LATEST_LOG_DATE = (
 TGL = f'IF($G$1="";{LATEST_LOG_DATE};TEXT($G$1;"yyyy-mm-dd"))'
 TGL_TPL = f'IF(Rekap!$G$1="";{LATEST_LOG_DATE};TEXT(Rekap!$G$1;"yyyy-mm-dd"))'
 
-REKAP = [
-    f'=IFERROR(SORT(UNIQUE(FILTER(Log!F2:F;Log!F2:F<>"";LEFT(Log!A2:A;10)={TGL})));"")',
-    '=ARRAYFORMULA(IF(A2:A="";"";IFERROR(VLOOKUP(A2:A;{Log!F2:F\\Log!D2:D};2;FALSE);"")))',
-    '=ARRAYFORMULA(IF(A2:A="";"";IFERROR(VLOOKUP(A2:A;{Log!F2:F\\Log!E2:E};2;FALSE);"")))',
-    f'=ARRAYFORMULA(IF(A2:A="";"";SUMIFS(Log!G:G;Log!F:F;A2:A;Log!A:A;{TGL}&"*")))',
-]
+# Satu QUERY untuk keempat kolom, BUKAN empat formula terpisah. Versi lama
+# memakai ARRAYFORMULA(SUMIFS(...)) dan itu salah: SUMIFS tidak ter-vektor di
+# dalam ARRAYFORMULA, jadi setiap baris ikut hasil baris pertama (ketahuan
+# 2026-07-30: dua SKU beda qty 75 dan 22 sama-sama ditulis 75). Pola QUERY ini
+# sama dengan tab Arsip Harian, yang sejak awal memang benar.
+# Col1=Waktu, Col4=Produk, Col5=Satuan, Col6=SKU, Col7=Qty
+REKAP = (
+    '=IFERROR(QUERY({Log!A2:H};'
+    '"select Col6, Col4, Col5, sum(Col7) '
+    'where Col6<>\'\' and Col1 starts with \'"&' + TGL + '&"\' '
+    'group by Col6, Col4, Col5 order by Col6 '
+    'label sum(Col7) \'\'";0);"")'
+)
 TEMPLATE = (
     '=IFERROR(QUERY({Log!A2:H};'
     '"select max(Col1), Col4, Col5, Col6, sum(Col7), Col3, max(Col8) '
@@ -109,7 +116,8 @@ def main():
     rekap = get_or_add_worksheet(sh, "Rekap", rows=3000, cols=8)
     retry(lambda: rekap.update(values=[["SKU", "Produk", "Satuan", "Total Qty"]], range_name="A1:D1"))
     retry(lambda: rekap.update(values=[["Tanggal (kosong = hari SO terakhir)"]], range_name="F1"))
-    retry(lambda: rekap.update(values=[REKAP], range_name="A2:D2", raw=False))
+    retry(lambda: rekap.batch_clear(["B2:D2"]))  # sisa formula per-kolom versi lama
+    retry(lambda: rekap.update(values=[[REKAP]], range_name="A2", raw=False))
 
     # Setup Template Olsera tab (kolom A:G tetap bersih untuk di-copy ke Olsera)
     tpl = get_or_add_worksheet(sh, "Template Olsera", rows=3000, cols=8)
