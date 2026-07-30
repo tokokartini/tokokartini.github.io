@@ -1,4 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
+import { buildLogRows } from './rows.ts'
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -37,11 +38,6 @@ async function googleToken(email: string, key: string): Promise<string> {
   return (await r.json()).access_token
 }
 
-function wib(iso: string): string {
-  const d = new Date(new Date(iso).getTime() + 7 * 3600 * 1000)
-  return d.toISOString().slice(0, 19).replace('T', ' ')
-}
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS })
   try {
@@ -76,44 +72,17 @@ Deno.serve(async (req) => {
     }
 
     const ids = entries.map((e) => e.id)
+    // Dilaporkan ke HP sebagai jumlah "tersinkron" -- pakai jumlah baris yang
+    // benar-benar masuk sheet, bukan jumlah entri yang diklaim, supaya entri
+    // tanpa satuan tidak dihitung sebagai terkirim.
+    let written = 0
 
     try {
-      const rows: (string | number)[][] = []
-      for (const e of entries) {
-        const units = e.units as { sku: string; variant: string; mult: number; qty: number }[]
-        const rows: (string | number)[][] = []
-
-for (const e of entries) {
-  const units = (e.units ?? []) as {
-    sku: string
-    variant: string
-    mult: number
-    qty: number
-  }[]
-
-  // Cari satuan terkecil (mult = 1).
-  // Kalau tidak ada, ambil yang multiplier paling kecil.
-  const baseUnit =
-    units.find((u) => u.mult === 1) ??
-    units.reduce(
-      (smallest, current) =>
-        current.mult < smallest.mult ? current : smallest,
-      units[0]
-    )
-
-  if (!baseUnit) continue
-
-  rows.push([
-    wib(e.updated_at),
-    e.username,
-    e.rack,
-    e.product_name,
-    baseUnit.variant,
-    baseUnit.sku,
-    Number(e.qty_total ?? 0),
-    e.expired_date ?? '',
-  ])
-}
+      const { rows, skipped } = buildLogRows(entries)
+      written = rows.length
+      if (skipped.length) {
+        console.warn(`entri tanpa satuan, dilewati: ${skipped.join(', ')}`)
+      }
 
       if (rows.length) {
         const token = await googleToken(Deno.env.get('GOOGLE_SA_EMAIL')!, Deno.env.get('GOOGLE_SA_KEY')!)
@@ -134,7 +103,7 @@ for (const e of entries) {
       throw e
     }
 
-    return new Response(JSON.stringify({ uploaded: entries.length }), {
+    return new Response(JSON.stringify({ uploaded: written }), {
       headers: { ...CORS, 'Content-Type': 'application/json' },
     })
   } catch (e) {

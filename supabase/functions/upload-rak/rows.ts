@@ -1,0 +1,67 @@
+// Pemilih baris untuk tab Log. File ini SENGAJA murni -- tanpa import Deno dan
+// tanpa jaringan -- supaya bisa diuji Vitest (rows.test.ts) di laptop, sementara
+// index.ts tetap satu-satunya yang menyentuh Supabase dan Sheets.
+//
+// Satu entri = SATU baris, dalam satuan dasar, qty dari kolom qty_total. Kolom
+// qty_total sudah dihitung frontend lewat totalQty() di src/lib/convert.js;
+// jangan dijumlah ulang di sini supaya tidak ada dua sumber kebenaran.
+
+export type Unit = { sku: string; variant: string; mult: number; qty: number }
+
+export type Entry = {
+  updated_at: string
+  username: string
+  rack: string
+  product_name: string
+  units: Unit[] | null
+  qty_total: number | null
+  expired_date: string | null
+}
+
+export type LogRow = (string | number)[]
+
+export function wib(iso: string): string {
+  const d = new Date(new Date(iso).getTime() + 7 * 3600 * 1000)
+  return d.toISOString().slice(0, 19).replace('T', ' ')
+}
+
+// Satuan dasar = mult 1. Kalau master tidak punya satuan mult 1 untuk produk itu,
+// ambil mult terkecil supaya qty_total (yang selalu dalam satuan terkecil) tetap
+// dilaporkan di satuan yang paling mendekati, bukan di satuan karton.
+export function baseUnitOf(units: Unit[] | null): Unit | null {
+  if (!units || !units.length) return null
+  return (
+    units.find((u) => u.mult === 1) ??
+    units.reduce((smallest, u) => (u.mult < smallest.mult ? u : smallest), units[0])
+  )
+}
+
+// Kolom: Waktu, Staff, rack, Produk, Satuan, SKU, Qty, ED -- harus tetap 8 dan
+// urutannya persis begitu; Rekap/Template Olsera/Arsip Harian menunjuk kolom ini.
+export function buildLogRows(entries: Entry[]): { rows: LogRow[]; skipped: string[] } {
+  const rows: LogRow[] = []
+  const skipped: string[] = []
+
+  for (const e of entries) {
+    const baseUnit = baseUnitOf(e.units)
+    // Entri tanpa satuan tidak bisa dinamai SKU-nya. Dilewati, bukan bikin
+    // seluruh upload gagal -- entri lain di rak yang sama tetap harus masuk.
+    if (!baseUnit) {
+      skipped.push(e.product_name)
+      continue
+    }
+
+    rows.push([
+      wib(e.updated_at),
+      e.username,
+      e.rack,
+      e.product_name,
+      baseUnit.variant,
+      baseUnit.sku,
+      Number(e.qty_total ?? 0),
+      e.expired_date ?? '',
+    ])
+  }
+
+  return { rows, skipped }
+}
