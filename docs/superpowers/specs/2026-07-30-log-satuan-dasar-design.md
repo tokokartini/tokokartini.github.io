@@ -122,6 +122,27 @@ yang sejak awal benar), lalu `B2:D2` dikosongkan:
 sebelum dan sesudah), dan kotak tanggalnya masih jalan: `2026-07-29` → 138 baris, kosong → hari SO
 terakhir.
 
+## Tambahan: awalan "STOK " di kolom produk tab output
+
+Template import Olsera menuntut nama produk berawalan `STOK ` (kapital). Diminta user 2026-07-30.
+
+Awalan ditambahkan **hanya di tab output** — `Template Olsera`, `Rekap`, `Arsip Harian`. Tab `Log`
+tetap menyimpan nama produk asli supaya riwayat mentah masih bisa dicocokkan dengan master dan
+dengan tabel `count_entries`; web app juga tidak berubah.
+
+Caranya: kolom `Log!D` diganti kolom hitung di dalam sumber QUERY, sehingga nomor `Col` di semua
+formula tidak bergeser:
+
+```
+PRODUK_STOK = ARRAYFORMULA(IF(Log!D2:D="";"";"STOK "&Log!D2:D))
+LOG_SRC     = {Log!A2:C \ PRODUK_STOK \ Log!E2:H}
+```
+
+`Arsip Harian` memakai bentuk sendiri: `{ARRAYFORMULA(LEFT(Log!A2:A;10)) \ PRODUK_STOK \ Log!E2:G}`.
+
+Diuji di tab sementara lebih dulu, lalu dipasang ke tab asli; qty tidak berubah (75 dan 22) dan
+`Rekap!G1` tidak tersentuh.
+
 ## Di luar lingkup
 
 Struktur tab lain, format kolom, dan kemampuan mengoreksi hasil dengan tangan di sheet. Penyebab

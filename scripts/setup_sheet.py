@@ -26,6 +26,14 @@ LATEST_LOG_DATE = (
 TGL = f'IF($G$1="";{LATEST_LOG_DATE};TEXT($G$1;"yyyy-mm-dd"))'
 TGL_TPL = f'IF(Rekap!$G$1="";{LATEST_LOG_DATE};TEXT(Rekap!$G$1;"yyyy-mm-dd"))'
 
+# Template import Olsera menuntut nama produk berawalan "STOK ". Awalan itu
+# ditambahkan di TAB OUTPUT saja -- Log tetap menyimpan nama produk asli supaya
+# riwayat mentah bisa dicocokkan dengan master dan dengan tabel count_entries.
+# Dipakai sebagai kolom pengganti Log!D di dalam sumber QUERY, jadi nomor Col
+# di semua formula di bawah tidak bergeser.
+PRODUK_STOK = 'ARRAYFORMULA(IF(Log!D2:D="";"";"STOK "&Log!D2:D))'
+LOG_SRC = '{Log!A2:C\\' + PRODUK_STOK + '\\Log!E2:H}'
+
 # Satu QUERY untuk keempat kolom, BUKAN empat formula terpisah. Versi lama
 # memakai ARRAYFORMULA(SUMIFS(...)) dan itu salah: SUMIFS tidak ter-vektor di
 # dalam ARRAYFORMULA, jadi setiap baris ikut hasil baris pertama (ketahuan
@@ -33,14 +41,14 @@ TGL_TPL = f'IF(Rekap!$G$1="";{LATEST_LOG_DATE};TEXT(Rekap!$G$1;"yyyy-mm-dd"))'
 # sama dengan tab Arsip Harian, yang sejak awal memang benar.
 # Col1=Waktu, Col4=Produk, Col5=Satuan, Col6=SKU, Col7=Qty
 REKAP = (
-    '=IFERROR(QUERY({Log!A2:H};'
+    '=IFERROR(QUERY(' + LOG_SRC + ';'
     '"select Col6, Col4, Col5, sum(Col7) '
     'where Col6<>\'\' and Col1 starts with \'"&' + TGL + '&"\' '
     'group by Col6, Col4, Col5 order by Col6 '
     'label sum(Col7) \'\'";0);"")'
 )
 TEMPLATE = (
-    '=IFERROR(QUERY({Log!A2:H};'
+    '=IFERROR(QUERY(' + LOG_SRC + ';'
     '"select max(Col1), Col4, Col5, Col6, sum(Col7), Col3, max(Col8) '
     'where Col6<>\'\' and Col1 starts with \'"&' + TGL_TPL + '&"\' '
     'group by Col4, Col5, Col6, Col3 '
@@ -49,7 +57,7 @@ TEMPLATE = (
 # Arsip: semua hari, dikelompokkan per tanggal+SKU, terbaru di atas.
 # Col1=LEFT(Log!A;10) tanggal, Col2=Produk, Col3=Satuan, Col4=SKU, Col5=Qty
 ARSIP = (
-    '=IFERROR(QUERY({ARRAYFORMULA(LEFT(Log!A2:A;10))\\Log!D2:G};'
+    '=IFERROR(QUERY({ARRAYFORMULA(LEFT(Log!A2:A;10))\\' + PRODUK_STOK + '\\Log!E2:G};'
     '"select Col1, Col4, Col2, Col3, sum(Col5) '
     'where Col4<>\'\' group by Col1, Col4, Col2, Col3 '
     'order by Col1 desc, Col2 label sum(Col5) \'\'";0);"")'
