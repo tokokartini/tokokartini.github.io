@@ -32,7 +32,14 @@ TGL_TPL = f'IF(Rekap!$G$1="";{LATEST_LOG_DATE};TEXT(Rekap!$G$1;"yyyy-mm-dd"))'
 # Dipakai sebagai kolom pengganti Log!D di dalam sumber QUERY, jadi nomor Col
 # di semua formula di bawah tidak bergeser.
 PRODUK_STOK = 'ARRAYFORMULA(IF(Log!D2:D="";"";"STOK "&Log!D2:D))'
-LOG_SRC = '{Log!A2:C\\' + PRODUK_STOK + '\\Log!E2:H}'
+
+# Nama rak di Olsera ditulis tanpa spasi dan huruf kecil ("rack5"), sementara
+# web app memakai "Rak 5". Sama seperti awalan STOK, penyesuaian dilakukan di
+# tab output saja -- tabel racks di Supabase dan tampilan di HP tidak berubah.
+# Regex menerima "Rak 5", "rak5", maupun "rack2" yang sudah benar.
+RACK_OLSERA = 'ARRAYFORMULA(IF(Log!C2:C="";"";REGEXREPLACE(LOWER(Log!C2:C);"^\\s*rac?k\\s*";"rack")))'
+
+LOG_SRC = '{Log!A2:B\\' + RACK_OLSERA + '\\' + PRODUK_STOK + '\\Log!E2:H}'
 
 # Satu QUERY untuk keempat kolom, BUKAN empat formula terpisah. Versi lama
 # memakai ARRAYFORMULA(SUMIFS(...)) dan itu salah: SUMIFS tidak ter-vektor di
