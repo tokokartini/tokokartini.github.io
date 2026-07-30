@@ -81,17 +81,39 @@ Deno.serve(async (req) => {
       const rows: (string | number)[][] = []
       for (const e of entries) {
         const units = e.units as { sku: string; variant: string; mult: number; qty: number }[]
-        const qtyUnits = units.filter((u) => u.qty && u.qty > 0)
-        if (qtyUnits.length) {
-          for (const u of qtyUnits) {
-            rows.push([wib(e.updated_at), e.username, e.rack, e.product_name, u.variant, u.sku, u.qty, e.expired_date ?? ''])
-          }
-        } else {
-          // Stok kosong tetap tercatat sebagai satu baris qty 0 (keputusan user).
-          const baseUnit = units.find((u) => u.mult === 1) ?? units[units.length - 1]
-          rows.push([wib(e.updated_at), e.username, e.rack, e.product_name, baseUnit.variant, baseUnit.sku, 0, e.expired_date ?? ''])
-        }
-      }
+        const rows: (string | number)[][] = []
+
+for (const e of entries) {
+  const units = (e.units ?? []) as {
+    sku: string
+    variant: string
+    mult: number
+    qty: number
+  }[]
+
+  // Cari satuan terkecil (mult = 1).
+  // Kalau tidak ada, ambil yang multiplier paling kecil.
+  const baseUnit =
+    units.find((u) => u.mult === 1) ??
+    units.reduce(
+      (smallest, current) =>
+        current.mult < smallest.mult ? current : smallest,
+      units[0]
+    )
+
+  if (!baseUnit) continue
+
+  rows.push([
+    wib(e.updated_at),
+    e.username,
+    e.rack,
+    e.product_name,
+    baseUnit.variant,
+    baseUnit.sku,
+    Number(e.qty_total ?? 0),
+    e.expired_date ?? '',
+  ])
+}
 
       if (rows.length) {
         const token = await googleToken(Deno.env.get('GOOGLE_SA_EMAIL')!, Deno.env.get('GOOGLE_SA_KEY')!)
