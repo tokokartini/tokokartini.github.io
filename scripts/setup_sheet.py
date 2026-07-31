@@ -39,7 +39,14 @@ PRODUK_STOK = 'ARRAYFORMULA(IF(Log!D2:D="";"";"STOK "&Log!D2:D))'
 # Regex menerima "Rak 5", "rak5", maupun "rack2" yang sudah benar.
 RACK_OLSERA = 'ARRAYFORMULA(IF(Log!C2:C="";"";REGEXREPLACE(LOWER(Log!C2:C);"^\\s*rac?k\\s*";"rack")))'
 
-LOG_SRC = '{Log!A2:B\\' + RACK_OLSERA + '\\' + PRODUK_STOK + '\\Log!E2:H}'
+# Log kini 9 kolom: A Waktu, B Staff, C Rak, D Produk, E Rincian, F Qty,
+# G Satuan, H ED, I SKU. Array literal di bawah SENGAJA menyusun ulang kolom
+# jadi Satuan, SKU, Qty supaya nomor Col di dalam string QUERY tetap sama
+# seperti sebelum kolom Rincian ada -- jadi tidak ada query yang perlu diedit.
+# Kolom E (Rincian) tidak ikut: teks itu untuk dibaca manusia di Log saja.
+LOG_TAIL = 'Log!G2:G\\Log!I2:I\\Log!F2:F'
+
+LOG_SRC = '{Log!A2:B\\' + RACK_OLSERA + '\\' + PRODUK_STOK + '\\' + LOG_TAIL + '\\Log!H2:H}'
 
 # Satu QUERY untuk keempat kolom, BUKAN empat formula terpisah. Versi lama
 # memakai ARRAYFORMULA(SUMIFS(...)) dan itu salah: SUMIFS tidak ter-vektor di
@@ -64,7 +71,7 @@ TEMPLATE = (
 # Arsip: semua hari, dikelompokkan per tanggal+SKU, terbaru di atas.
 # Col1=LEFT(Log!A;10) tanggal, Col2=Produk, Col3=Satuan, Col4=SKU, Col5=Qty
 ARSIP = (
-    '=IFERROR(QUERY({ARRAYFORMULA(LEFT(Log!A2:A;10))\\' + PRODUK_STOK + '\\Log!E2:G};'
+    '=IFERROR(QUERY({ARRAYFORMULA(LEFT(Log!A2:A;10))\\' + PRODUK_STOK + '\\' + LOG_TAIL + '};'
     '"select Col1, Col4, Col2, Col3, sum(Col5) '
     'where Col4<>\'\' group by Col1, Col4, Col2, Col3 '
     'order by Col1 desc, Col2 label sum(Col5) \'\'";0);"")'
@@ -73,7 +80,7 @@ ARSIP = (
 # Dipasang juga oleh scripts/add_arsip_bulanan.py -- pakai skrip itu kalau SO
 # sedang berjalan, karena setup_sheet.py mengosongkan Rekap!G1.
 ARSIP_BULANAN = (
-    '=IFERROR(QUERY({ARRAYFORMULA(LEFT(Log!A2:A;7))\\' + PRODUK_STOK + '\\Log!E2:G};'
+    '=IFERROR(QUERY({ARRAYFORMULA(LEFT(Log!A2:A;7))\\' + PRODUK_STOK + '\\' + LOG_TAIL + '};'
     '"select Col1, Col4, Col2, Col3, sum(Col5) '
     'where Col4<>\'\' group by Col1, Col4, Col2, Col3 '
     'order by Col1 desc, Col2 label sum(Col5) \'\'";0);"")'
@@ -134,7 +141,7 @@ def main():
     except gspread.exceptions.WorksheetNotFound:
         log = sh.sheet1
     retry(lambda: log.update_title("Log"))
-    retry(lambda: log.update(values=[["Waktu", "Staff", "Rak", "Produk", "Satuan", "SKU", "Qty", "ED"]], range_name="A1:H1"))
+    retry(lambda: log.update(values=[["Waktu", "Staff", "Rak", "Produk", "Rincian", "Qty", "Satuan", "ED", "SKU"]], range_name="A1:I1"))
 
     # Setup Rekap tab (+ kotak tanggal di F1/G1)
     rekap = get_or_add_worksheet(sh, "Rekap", rows=3000, cols=8)
@@ -163,8 +170,9 @@ def main():
     isi_log = retry(lambda: log.get_all_values())
     if len(isi_log) <= 1:
         retry(lambda: log.update(
-            values=[[time.strftime("%Y-%m-%d") + " 00:00:00", "tes", "Rak 1", "Produk Uji", "Pcs", "TES-1", 5, ""]],
-            range_name="A2:H2"))
+            values=[[time.strftime("%Y-%m-%d") + " 00:00:00", "tes", "Rak 1", "Produk Uji",
+                     "1 Pcs", 5, "Pcs", "", "TES-1"]],
+            range_name="A2:I2"))
         tanggal_uji = time.strftime("%Y-%m-%d")
         bersihkan_log = True
     else:
@@ -205,7 +213,7 @@ def main():
     # kosongkan kotak tanggal -> Rekap & Template ikut tanggal SO terakhir di Log
     retry(lambda: rekap.batch_clear(["G1"]))
     if bersihkan_log:
-        retry(lambda: log.batch_clear(["A2:H2"]))
+        retry(lambda: log.batch_clear(["A2:I2"]))
 
     # Update config
     cfg_path = Path(__file__).parent / "config.local.json"

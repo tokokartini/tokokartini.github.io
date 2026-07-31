@@ -19,11 +19,16 @@ SHEET_ID = "1uP2ntR00nrstLXKTuCYw1IzWDKohQAKsaq3qeeApDgw"
 # Sama seperti setup_sheet.py: awalan "STOK " hanya di tab output.
 PRODUK_STOK = 'ARRAYFORMULA(IF(Log!D2:D="";"";"STOK "&Log!D2:D))'
 
+# Log 9 kolom: kolom disusun ulang jadi Satuan, SKU, Qty supaya nomor Col di
+# string QUERY tetap sama seperti versi Log 8 kolom. Sama persis dengan
+# LOG_TAIL di setup_sheet.py -- kalau salah satu berubah, ubah keduanya.
+LOG_TAIL = 'Log!G2:G\\Log!I2:I\\Log!F2:F'
+
 # Arsip bulanan: LEFT(Log!A;7) -> "2026-07". Kolom sumber sama persis dengan
 # Arsip Harian, cuma tanggalnya dipotong sampai bulan.
 # Col1=Bulan, Col2=Produk, Col3=Satuan, Col4=SKU, Col5=Qty
 ARSIP_BULANAN = (
-    '=IFERROR(QUERY({ARRAYFORMULA(LEFT(Log!A2:A;7))\\' + PRODUK_STOK + '\\Log!E2:G};'
+    '=IFERROR(QUERY({ARRAYFORMULA(LEFT(Log!A2:A;7))\\' + PRODUK_STOK + '\\' + LOG_TAIL + '};'
     '"select Col1, Col4, Col2, Col3, sum(Col5) '
     'where Col4<>\'\' group by Col1, Col4, Col2, Col3 '
     'order by Col1 desc, Col2 label sum(Col5) \'\'";0);"")'
