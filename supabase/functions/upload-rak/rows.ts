@@ -41,10 +41,17 @@ export function baseUnitOf(units: Unit[] | null): Unit | null {
 // Rincian satuan asli yang diketik petugas, mis. "2 Krtn + 3 Pack + 5 Pcs".
 // Hanya untuk dibaca manusia saat mencocokkan ulang ke rak -- angka yang
 // dihitung tab output tetap kolom Qty (satuan dasar), bukan teks ini.
+//
+// Filter !== 0 (bukan > 0): CountForm tidak dibungkus <form>, jadi min="0" di
+// input HTML tidak pernah divalidasi saat Simpan ditekan, dan constraint DB
+// cuma menahan qty_total (jumlah gabungan) >= 0 -- satu satuan boleh negatif
+// selama satuan lain menutupinya. Kalau qty negatif lolos, > 0 akan diam-diam
+// membuang satuan itu dari Rincian sementara totalQty() di convert.js tetap
+// menghitungnya, bikin Rincian dan Qty tidak nyambung.
 export function rincianText(units: Unit[] | null): string {
   if (!units) return ''
   return [...units]
-    .filter((u) => Number(u.qty) > 0)
+    .filter((u) => Number(u.qty) !== 0)
     .sort((a, b) => b.mult - a.mult)
     .map((u) => `${Number(u.qty)} ${u.variant}`)
     .join(' + ')

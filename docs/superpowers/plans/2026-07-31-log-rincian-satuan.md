@@ -380,7 +380,7 @@ if __name__ == "__main__":
 - [ ] **Step 2: Jalankan dry-run**
 
 Run: `cd "C:\Users\COMPUTER\Documents\Claude AI\so-kartini\scripts"; python migrate_log_kolom.py`
-Expected: laporan `Log: 217 baris -> 217 baris` dan 5 contoh baris dengan kolom kelima kosong, qty di kolom keenam, satuan ketujuh, SKU terakhir. Tidak ada yang ditulis.
+Expected: laporan `Log: 137 baris -> 137 baris` (137, bukan 217 -- pemilik sudah menghapus baris tanggal 2026-07-30 dari Log) dan 5 contoh baris dengan kolom kelima kosong, qty di kolom keenam, satuan ketujuh, SKU terakhir. Tidak ada yang ditulis.
 
 - [ ] **Step 3: Jalankan lagi untuk memastikan dry-run tidak mengubah apa pun**
 
@@ -527,8 +527,11 @@ git commit -m "refactor: sumber formula ikut susunan Log 9 kolom"
 - [ ] **Step 1: Migrasi kolom Log**
 
 Run: `cd "C:\Users\COMPUTER\Documents\Claude AI\so-kartini\scripts"; python migrate_log_kolom.py --tulis`
-Expected: `backup dibuat: 'Log backup kolom 2026-07-31'` lalu `selesai. Log sekarang 217 baris, 9 kolom.`
+Expected: `backup dibuat: 'Log backup kolom 2026-07-31'` lalu `selesai. Log sekarang 137 baris, 9 kolom.` (137, bukan 217 -- pemilik sudah menghapus baris tanggal 2026-07-30 dari Log), diikuti `verifikasi: Log berisi 138 baris (termasuk header), sesuai harapan.`
 Kalau keluar `BATAL: Log berubah saat script jalan`, ada yang upload — ulangi dari awal.
+Kalau keluar `PERHATIAN: Log sekarang berisi ... baris ... melebihi ...`, ada upload yang menyelinap saat migrasi jalan — periksa baris di bawah baris yang disebutkan sebelum lanjut ke Step berikutnya.
+
+**Pemulihan kalau Step 1 gagal di tengah** (mis. `batch_clear` sukses tapi `update` habis retry-nya): Log akan kosong dan skrip apa pun yang membaca Log berikutnya berhenti dengan `BATAL: header Log tak dikenali: []`. Pulihkan dengan menyalin isi tab `Log backup kolom 2026-07-31` (dibuat tepat sebelum penulisan) kembali ke Log, lalu jalankan ulang `python migrate_log_kolom.py --tulis`.
 
 - [ ] **Step 2: Pasang formula baru**
 
@@ -561,6 +564,14 @@ Expected di tab Log, baris paling bawah:
 - kolom E berisi teks seperti `1 Krtn (50 Pack) + 25 Pack`
 - kolom F angka qty dasar, kolom G nama satuan dasar, kolom I SKU
 Expected di tab Rekap: SKU itu muncul dengan Total Qty sama dengan kolom F.
+
+**Deteksi baris yang lolos di celah antara Step 1 dan Step 3:** antara sheet dipindah ke 9 kolom (Step 1) dan Edge Function baru live (Step 3), Edge Function LAMA yang masih menulis 8 nilai bisa menyelipkan baris dengan kolom I (SKU) kosong — worker tetap melihat "berhasil" di app, tapi keempat tab output menyaring baris begitu tanpa error karena semuanya filter `Col6<>''`/`SKU<>''`, jadi baris itu tak pernah muncul di laporan mana pun tanpa ketahuan. Sebelum menutup Task 4, tulis di sel kosong mana pun di sheet persis:
+
+```
+=COUNTIFS(Log!D2:D;"<>";Log!I2:I;"")
+```
+
+(locale sheet ini pakai `;` sebagai pemisah argumen — tulis persis seperti di atas, bukan `,`). Hasil harus `0`. Kalau tidak nol, ada baris yang masuk Log saat celah itu — cari baris dengan kolom I kosong tapi kolom D (Produk) terisi, lalu perbaiki manual (isi ulang SKU-nya, atau hapus dan minta petugas upload ulang).
 
 - [ ] **Step 5: Bersihkan baris uji dan commit catatan**
 

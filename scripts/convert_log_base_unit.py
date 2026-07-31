@@ -186,7 +186,14 @@ def main():
     # Skrip ini menulis 8 kolom dengan urutan lama, jadi menjalankannya sekarang
     # akan membuang kolom Rincian dan menggeser Qty/Satuan/SKU. Disimpan hanya
     # sebagai catatan konversi 2026-07-30.
-    if (values[0] if values else [])[:5] == ["Waktu", "Staff", "Rak", "Produk", "Rincian"]:
+    #
+    # Cek case-insensitive dan longgar posisi -- sama seperti headers_match() di
+    # migrate_log_kolom.py, karena header live sheet pernah memuat "rack" huruf
+    # kecil di kolom C dari setup lama. Kalau cek ini dibuat presisi/case-sensitive
+    # dan header live drift lagi, guard ini diam-diam gagal match dan skrip
+    # menulis ulang Log jadi 8 kolom, membuang semua nilai Rincian.
+    header_norm = [str(x).strip().lower() for x in (values[0] if values else [])[:9]]
+    if "rincian" in header_norm:
         print("BATAL: Log sudah susunan 9 kolom. Skrip ini hanya untuk format lama.")
         return
 

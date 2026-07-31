@@ -101,13 +101,33 @@ def main():
 
     # Penjaga: kalau header sudah 9 kolom, migrasi pernah jalan. Menjalankannya
     # dua kali akan menggeser kolom untuk kedua kalinya dan merusak datanya.
+    #
+    # Header teks saja tidak cukup dipercaya: setup_sheet.py menulis ulang
+    # Log!A1:I1 tanpa menyentuh data, jadi kalau operator menjalankannya sebelum
+    # migrasi, header akan berbunyi "sudah baru" padahal data masih 8 kolom lama.
+    # Guard di sini karena itu juga menuntut BUKTI DI DATA: minimal satu baris
+    # punya kolom I (SKU baru) terisi. Kalau header baru tapi kolom I kosong di
+    # semua baris, perlakukan sebagai belum-migrasi dan lanjutkan.
     header = (values[0] if values else [])
     if headers_match(header, HEADER_BARU, 9):
-        print("BATAL: header Log sudah susunan baru, migrasi tidak perlu diulang.")
-        return
-
-    if not headers_match(header, HEADER_LAMA, 8):
-        print(f"BATAL: header Log tak dikenali: {header}")
+        col_i_terisi = any(
+            len(row) > 8 and str(row[8]).strip() for row in values[1:]
+        )
+        if col_i_terisi:
+            print("BATAL: header Log sudah susunan baru, migrasi tidak perlu diulang.")
+            return
+        print(
+            "Header Log sudah bertuliskan susunan baru, tapi tidak ada baris data dengan "
+            "kolom I (SKU) terisi -- kemungkinan cuma header yang ditimpa (mis. oleh "
+            "setup_sheet.py) sementara data masih 8 kolom lama. Melanjutkan migrasi "
+            "memakai data yang ada, mengabaikan teks header."
+        )
+    elif not headers_match(header, HEADER_LAMA, 8):
+        print(
+            f"BATAL: header Log tak dikenali: {header}. "
+            f"Kalau Log kosong akibat migrasi yang terhenti di tengah (batch_clear sukses tapi "
+            f"update gagal), pulihkan isi tab 'Log backup kolom <tanggal>' ke Log lalu jalankan ulang."
+        )
         return
 
     rows, truncated = pindah(values)
@@ -147,9 +167,32 @@ def main():
         print("BATAL: Log berubah saat script jalan (ada upload masuk). Jalankan ulang.")
         return
 
-    retry(lambda: ws.batch_clear([f"A1:I{max(len(values), len(rows) + 1) + 10}"]))
+    # Tulis DULU, baru bersihkan sisa baris lama di bawahnya. Kalau urutannya
+    # dibalik (clear lalu update), ada jendela waktu di mana Log kosong sama
+    # sekali -- upload yang masuk tepat di jendela itu akan ditandai terkirim
+    # (count_entries.uploaded_at diisi) padahal baris barunya lalu tertimpa
+    # update ini dan tidak pernah ada di Log maupun di backup. Dengan menulis
+    # dulu, upload yang menyelinap di jendela (sekarang jauh lebih sempit, cuma
+    # antara update dan batch_clear) paling buruk selamat sebagai baris bentuk
+    # aneh di bagian yang nanti dibersihkan -- kelihatan, bukan lenyap.
+    n_baris = len(rows) + 1  # header + data baru
     retry(lambda: ws.update(values=[HEADER_BARU] + rows, range_name="A1", value_input_option="RAW"))
+    sisa_akhir = max(len(values), len(rows) + 1) + 10
+    retry(lambda: ws.batch_clear([f"A{n_baris + 1}:I{sisa_akhir}"]))
     print(f"selesai. Log sekarang {len(rows)} baris, 9 kolom. Backup ada di '{backup_name}'.")
+
+    # Verifikasi: baca ulang jumlah baris supaya operator lihat kalau ada
+    # upload yang menyelinap di jendela tabrakan sempit di atas.
+    cek_akhir = retry(lambda: ws.get_all_values(value_render_option="UNFORMATTED_VALUE"))
+    baris_akhir = len(cek_akhir)
+    if baris_akhir > n_baris:
+        print(
+            f"PERHATIAN: Log sekarang berisi {baris_akhir} baris (termasuk header), "
+            f"melebihi {n_baris} yang diharapkan -- kemungkinan ada upload yang menyelinap "
+            f"selama migrasi. Periksa baris di bawah baris ke-{n_baris} secara manual."
+        )
+    else:
+        print(f"verifikasi: Log berisi {baris_akhir} baris (termasuk header), sesuai harapan.")
 
 
 if __name__ == "__main__":

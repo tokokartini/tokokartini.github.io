@@ -14,7 +14,7 @@ Web app stok opname Toko Kartini — https://tokokartini.github.io
   - Halaman admin menampilkan waktu sync terakhir beserta ringkasannya, termasuk kalau job malam gagal — cek di situ kalau barang baru belum muncul.
   - `python scripts/sync_products.py` tetap ada sebagai cadangan kalau Edge Function bermasalah.
   - Pengaman: kalau pembacaan sheet menghasilkan kurang dari separuh jumlah produk aktif, sync dibatalkan dan dicatat gagal — supaya sheet yang bermasalah tidak menonaktifkan seluruh katalog.
-- Setup spreadsheet: `cd scripts; python setup_sheet.py` (aman diulang di luar jam SO; tidak menulis ke baris data Log kalau sudah ada isi, tapi TETAP menulis ulang header `Log!A1:H1` dan MENGOSONGKAN `Rekap!G1` tiap kali dijalankan — jangan jalankan di tengah sesi SO).
+- Setup spreadsheet: `cd scripts; python setup_sheet.py` (aman diulang di luar jam SO; tidak menulis ke baris data Log kalau sudah ada isi, tapi TETAP menulis ulang header `Log!A1:I1` — 9 kolom, termasuk Rincian — dan MENGOSONGKAN `Rekap!G1` tiap kali dijalankan — jangan jalankan di tengah sesi SO).
 - Akun staff: login sebagai `admin` → buka halaman Admin (dashboard + form buat akun), isi username & password.
   - Hapus/nonaktifkan akun: tanpa riwayat SO → hapus permanen; ada riwayat SO → nonaktif (SO tetap tersimpan, bisa diaktifkan via **Aktifkan** di baris yang sama); akun `admin` tidak bisa dihapus atau dinonaktifkan.
   - Cadangan: Supabase Dashboard → Authentication → Add user, email `<username>@tokokartini.app`, centang auto-confirm.

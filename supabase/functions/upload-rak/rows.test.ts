@@ -82,6 +82,15 @@ describe('rincianText', () => {
     expect(rincianText([])).toBe('')
   })
 
+  it('qty negatif tetap ditulis (input tidak dijaga form, DB cuma cek total)', () => {
+    expect(
+      rincianText([
+        { sku: 'X-G', variant: 'Krtn', mult: 40, qty: 1 },
+        { sku: 'X-3', variant: 'Pcs', mult: 1, qty: -3 },
+      ]),
+    ).toBe('1 Krtn + -3 Pcs')
+  })
+
   it('tidak mengubah urutan array aslinya', () => {
     const units = [
       { sku: 'X-3', variant: 'Pcs', mult: 1, qty: 5 },
