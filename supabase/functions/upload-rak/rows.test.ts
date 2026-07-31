@@ -1,7 +1,7 @@
 // Menguji pemilih baris Log: tiap entri jadi SATU baris dalam satuan dasar,
 // qty diambil dari kolom qty_total (bukan dijumlah ulang di sini).
 import { describe, it, expect } from 'vitest'
-import { baseUnitOf, buildLogRows, wib } from './rows.ts'
+import { baseUnitOf, buildLogRows, rincianText, wib } from './rows.ts'
 
 const KERTAS = {
   updated_at: '2026-07-30T01:01:53.000+00:00',
@@ -44,12 +44,70 @@ describe('baseUnitOf', () => {
   })
 })
 
+describe('rincianText', () => {
+  it('gabung tiap satuan, urut mult besar ke kecil', () => {
+    expect(rincianText(KERTAS.units)).toBe('1 Krtn (50 Pack) + 25 Pack')
+  })
+
+  it('urutan units acak tetap keluar besar ke kecil', () => {
+    expect(
+      rincianText([
+        { sku: 'X-3', variant: 'Pcs', mult: 1, qty: 5 },
+        { sku: 'X-G', variant: 'Krtn', mult: 40, qty: 2 },
+        { sku: 'X-2', variant: 'Pack', mult: 5, qty: 3 },
+      ]),
+    ).toBe('2 Krtn + 3 Pack + 5 Pcs')
+  })
+
+  it('satuan qty 0 tidak ikut ditulis', () => {
+    expect(
+      rincianText([
+        { sku: 'X-G', variant: 'Krtn', mult: 40, qty: 0 },
+        { sku: 'X-3', variant: 'Pcs', mult: 1, qty: 7 },
+      ]),
+    ).toBe('7 Pcs')
+  })
+
+  it('semua qty 0 -> teks kosong', () => {
+    expect(
+      rincianText([
+        { sku: 'X-G', variant: 'Krtn', mult: 40, qty: 0 },
+        { sku: 'X-3', variant: 'Pcs', mult: 1, qty: 0 },
+      ]),
+    ).toBe('')
+  })
+
+  it('units null atau kosong -> teks kosong', () => {
+    expect(rincianText(null)).toBe('')
+    expect(rincianText([])).toBe('')
+  })
+
+  it('tidak mengubah urutan array aslinya', () => {
+    const units = [
+      { sku: 'X-3', variant: 'Pcs', mult: 1, qty: 5 },
+      { sku: 'X-G', variant: 'Krtn', mult: 40, qty: 2 },
+    ]
+    rincianText(units)
+    expect(units.map((u) => u.sku)).toEqual(['X-3', 'X-G'])
+  })
+})
+
 describe('buildLogRows', () => {
-  it('entri multi-satuan jadi satu baris satuan dasar + qty_total', () => {
+  it('entri multi-satuan jadi satu baris 9 kolom, rincian + qty dasar', () => {
     const { rows, skipped } = buildLogRows([KERTAS])
     expect(skipped).toEqual([])
     expect(rows).toEqual([
-      ['2026-07-30 08:01:53', 'naruto', 'Rak 5', 'Kertas Nasi Putih MG 25*27', 'Pack', 'KTN-0008-3', 75, ''],
+      [
+        '2026-07-30 08:01:53',
+        'naruto',
+        'Rak 5',
+        'Kertas Nasi Putih MG 25*27',
+        '1 Krtn (50 Pack) + 25 Pack',
+        75,
+        'Pack',
+        '',
+        'KTN-0008-3',
+      ],
     ])
   })
 
@@ -64,21 +122,25 @@ describe('buildLogRows', () => {
         qty_total: 28,
       },
     ])
-    expect(rows[0][4]).toBe('Trs')
-    expect(rows[0][5]).toBe('PKG-0094-2')
-    expect(rows[0][6]).toBe(28)
+    expect(rows[0][4]).toBe('1 Krtn (20 Trs) + 2 Trs')
+    expect(rows[0][5]).toBe(28)
+    expect(rows[0][6]).toBe('Trs')
+    expect(rows[0][8]).toBe('PKG-0094-2')
   })
 
-  it('qty_total 0 tetap ditulis satu baris', () => {
-    const { rows } = buildLogRows([{ ...KERTAS, qty_total: 0 }])
+  it('qty_total 0 tetap ditulis satu baris, rincian kosong', () => {
+    const { rows } = buildLogRows([
+      { ...KERTAS, units: [{ sku: 'KTN-0008-3', variant: 'Pack', mult: 1, qty: 0 }], qty_total: 0 },
+    ])
     expect(rows).toHaveLength(1)
-    expect(rows[0][6]).toBe(0)
+    expect(rows[0][4]).toBe('')
+    expect(rows[0][5]).toBe(0)
   })
 
   it('qty_total null jadi 0, bukan baris hilang', () => {
     const { rows } = buildLogRows([{ ...KERTAS, qty_total: null }])
     expect(rows).toHaveLength(1)
-    expect(rows[0][6]).toBe(0)
+    expect(rows[0][5]).toBe(0)
   })
 
   it('units kosong atau null dilewati dan dilaporkan', () => {
@@ -95,6 +157,11 @@ describe('buildLogRows', () => {
   it('expired_date ditulis apa adanya kalau ada', () => {
     const { rows } = buildLogRows([{ ...KERTAS, expired_date: '2027-01-31' }])
     expect(rows[0][7]).toBe('2027-01-31')
+  })
+
+  it('tiap baris tepat 9 kolom', () => {
+    const { rows } = buildLogRows([KERTAS])
+    expect(rows[0]).toHaveLength(9)
   })
 
   it('urutan baris sama dengan urutan entri', () => {

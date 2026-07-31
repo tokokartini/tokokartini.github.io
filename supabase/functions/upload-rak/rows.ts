@@ -36,8 +36,21 @@ export function baseUnitOf(units: Unit[] | null): Unit | null {
   )
 }
 
-// Kolom: Waktu, Staff, rack, Produk, Satuan, SKU, Qty, ED -- harus tetap 8 dan
-// urutannya persis begitu; Rekap/Template Olsera/Arsip Harian menunjuk kolom ini.
+// Rincian satuan asli yang diketik petugas, mis. "2 Krtn + 3 Pack + 5 Pcs".
+// Hanya untuk dibaca manusia saat mencocokkan ulang ke rak -- angka yang
+// dihitung tab output tetap kolom Qty (satuan dasar), bukan teks ini.
+export function rincianText(units: Unit[] | null): string {
+  if (!units) return ''
+  return [...units]
+    .filter((u) => Number(u.qty) > 0)
+    .sort((a, b) => b.mult - a.mult)
+    .map((u) => `${Number(u.qty)} ${u.variant}`)
+    .join(' + ')
+}
+
+// Kolom: Waktu, Staff, rack, Produk, Rincian, Qty, Satuan, ED, SKU -- harus tetap
+// 9 dan urutannya persis begitu; Rekap/Template Olsera/Arsip Harian/Arsip Bulanan
+// menunjuk kolom ini lewat array literal di scripts/setup_sheet.py.
 export function buildLogRows(entries: Entry[]): { rows: LogRow[]; skipped: string[] } {
   const rows: LogRow[] = []
   const skipped: string[] = []
@@ -56,10 +69,11 @@ export function buildLogRows(entries: Entry[]): { rows: LogRow[]; skipped: strin
       e.username,
       e.rack,
       e.product_name,
-      baseUnit.variant,
-      baseUnit.sku,
+      rincianText(e.units),
       Number(e.qty_total ?? 0),
+      baseUnit.variant,
       e.expired_date ?? '',
+      baseUnit.sku,
     ])
   }
 
