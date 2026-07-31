@@ -67,15 +67,24 @@ def headers_match(header, expected_header, length):
 
 
 def pindah(values):
-    """values = get_all_values() termasuk header. Balikkan (baris_baru, jumlah)."""
+    """values = get_all_values() termasuk header. Balikkan (rows, truncated_info)."""
     rows = []
+    truncated = []  # List of (produk, extra_cols) for rows with data past column H
+
     for raw in values[1:]:
         row = list(raw) + [""] * (8 - len(raw))
         waktu, staff, rack, produk, satuan, sku, qty, ed = row[:8]
         if not str(produk).strip():
             continue
+
+        # Check for data past column H (8 columns in old layout)
+        extra_values = [str(v).strip() for v in raw[8:] if v and str(v).strip()]
+        if extra_values:
+            truncated.append((str(produk), extra_values))
+
         rows.append([waktu, staff, rack, produk, "", qty, satuan, ed, sku])
-    return rows
+
+    return rows, truncated
 
 
 def main():
@@ -87,8 +96,6 @@ def main():
     gc = gspread.authorize(creds)
     sh = retry(lambda: gc.open_by_key(SHEET_ID))
     ws = retry(lambda: sh.worksheet(TAB))
-    if ws.col_count < 9:
-        retry(lambda: ws.resize(rows=ws.row_count, cols=9))
 
     values = retry(lambda: ws.get_all_values(value_render_option="UNFORMATTED_VALUE"))
 
@@ -103,15 +110,27 @@ def main():
         print(f"BATAL: header Log tak dikenali: {header}")
         return
 
-    rows = pindah(values)
+    rows, truncated = pindah(values)
     print(f"Log: {len(values) - 1} baris -> {len(rows)} baris")
     print("\ncontoh 5 baris hasil:")
     for r in rows[:5]:
         print("  " + " | ".join(str(x) for x in r))
 
+    # Lapor kolom yang akan hilang saat migrasi
+    if truncated:
+        print(f"\nPerhatian: {len(truncated)} baris punya data di kolom > H yang akan hilang:")
+        for produk, extras in truncated[:5]:
+            print(f"  {produk} | data hilang: {extras}")
+        if len(truncated) > 5:
+            print(f"  ... dan {len(truncated) - 5} baris lagi")
+
     if not tulis:
         print("\nDRY-RUN. Tidak ada yang ditulis. Jalankan lagi dengan --tulis untuk menulis.")
         return
+
+    # Hanya saat menulis: ubah ukuran kolom terlebih dahulu
+    if ws.col_count < 9:
+        retry(lambda: ws.resize(rows=ws.row_count, cols=9))
 
     backup_name = f"Log backup kolom {date.today().isoformat()}"
     existing = [w.title for w in retry(lambda: sh.worksheets())]
