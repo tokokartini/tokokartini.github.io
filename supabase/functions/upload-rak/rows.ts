@@ -2,9 +2,11 @@
 // tanpa jaringan -- supaya bisa diuji Vitest (rows.test.ts) di laptop, sementara
 // index.ts tetap satu-satunya yang menyentuh Supabase dan Sheets.
 //
-// Satu entri = SATU baris, dalam satuan dasar, qty dari kolom qty_total. Kolom
-// qty_total sudah dihitung frontend lewat totalQty() di src/lib/convert.js;
-// jangan dijumlah ulang di sini supaya tidak ada dua sumber kebenaran.
+// Satu entri = SATU baris. Kolom Rincian berisi satuan asli yang diketik petugas
+// (mis. "2 Krtn + 3 Pack + 5 Pcs"), sementara kolom Qty tetap nilai satuan dasar
+// dari qty_total. Kolom qty_total sudah dihitung frontend lewat totalQty() di
+// src/lib/convert.js; jangan dijumlah ulang di sini supaya tidak ada dua sumber
+// kebenaran.
 
 export type Unit = { sku: string; variant: string; mult: number; qty: number }
 
