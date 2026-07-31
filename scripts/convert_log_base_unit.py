@@ -181,6 +181,15 @@ def main():
     ws = retry(lambda: sh.worksheet(TAB))
 
     values = retry(lambda: ws.get_all_values(value_render_option="UNFORMATTED_VALUE"))
+
+    # Log sudah pindah ke susunan 9 kolom (lihat scripts/migrate_log_kolom.py).
+    # Skrip ini menulis 8 kolom dengan urutan lama, jadi menjalankannya sekarang
+    # akan membuang kolom Rincian dan menggeser Qty/Satuan/SKU. Disimpan hanya
+    # sebagai catatan konversi 2026-07-30.
+    if (values[0] if values else [])[:5] == ["Waktu", "Staff", "Rak", "Produk", "Rincian"]:
+        print("BATAL: Log sudah susunan 9 kolom. Skrip ini hanya untuk format lama.")
+        return
+
     header, rows, lap = convert(values, products)
 
     print(f"Log: {lap['baris_lama']} baris -> {lap['baris_baru']} baris ({lap['grup']} entri)")
