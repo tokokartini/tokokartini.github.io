@@ -69,6 +69,15 @@ ARSIP = (
     'where Col4<>\'\' group by Col1, Col4, Col2, Col3 '
     'order by Col1 desc, Col2 label sum(Col5) \'\'";0);"")'
 )
+# Arsip bulanan: sama persis, tanggal dipotong sampai bulan (LEFT ...;7).
+# Dipasang juga oleh scripts/add_arsip_bulanan.py -- pakai skrip itu kalau SO
+# sedang berjalan, karena setup_sheet.py mengosongkan Rekap!G1.
+ARSIP_BULANAN = (
+    '=IFERROR(QUERY({ARRAYFORMULA(LEFT(Log!A2:A;7))\\' + PRODUK_STOK + '\\Log!E2:G};'
+    '"select Col1, Col4, Col2, Col3, sum(Col5) '
+    'where Col4<>\'\' group by Col1, Col4, Col2, Col3 '
+    'order by Col1 desc, Col2 label sum(Col5) \'\'";0);"")'
+)
 
 
 def retry(fn, tries=6, delay=3):
@@ -144,6 +153,11 @@ def main():
     retry(lambda: arsip.update(values=[["Tanggal", "SKU", "Produk", "Satuan", "Total Qty"]], range_name="A1:E1"))
     retry(lambda: arsip.update(values=[[ARSIP]], range_name="A2", raw=False))
 
+    # Setup Arsip Bulanan tab (rekap per bulan, semua bulan di satu tab)
+    arsip_bln = get_or_add_worksheet(sh, "Arsip Bulanan", rows=50000, cols=5)
+    retry(lambda: arsip_bln.update(values=[["Bulan", "SKU", "Produk", "Satuan", "Total Qty"]], range_name="A1:E1"))
+    retry(lambda: arsip_bln.update(values=[[ARSIP_BULANAN]], range_name="A2", raw=False))
+
     # Uji formula. Menulis ke Log HANYA bila Log masih kosong — kalau sudah ada
     # data SO, uji dilakukan dengan membaca tanggal yang sudah ada di sana.
     isi_log = retry(lambda: log.get_all_values())
@@ -167,6 +181,10 @@ def main():
     print(f"Template A2:G2: {cek2}")
     cek3 = retry(lambda: arsip.get_values("A2:E2"))
     print(f"Arsip A2:E2: {cek3}")
+    cek4 = retry(lambda: arsip_bln.get_values("A2:E2"))
+    print(f"Arsip Bulanan A2:E2: {cek4}")
+    assert cek4 and len(cek4[0]) == 5 and cek4[0][0] == tanggal_uji[:7], \
+        f"formula Arsip Bulanan gagal: {cek4}"
 
     if bersihkan_log:
         # Log ditulis oleh skrip ini sendiri barusan, jadi nilainya diketahui persis —
