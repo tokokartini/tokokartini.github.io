@@ -1,0 +1,4 @@
+# Semua berkas teks disimpan dan di-checkout dengan akhir-baris LF.
+# Mencegah keributan CRLF sisa Windows setelah pindah ke Linux.
+# text=auto membuat git mendeteksi biner (png/ico/dll) dan melewatinya.
+* text=auto eol=lf
