@@ -11,7 +11,7 @@ from google.oauth2.service_account import Credentials
 # Suppress gspread deprecation warnings
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-KEY_PATH = r"C:\Users\COMPUTER\Documents\Claude AI\claude-code-powershel-1427d99324cd.json"
+KEY_PATH = str(Path.home() / "Documents/Claude AI/claude-code-powershel-1427d99324cd.json")
 SHEET_ID = "1uP2ntR00nrstLXKTuCYw1IzWDKohQAKsaq3qeeApDgw"
 
 # locale id_ID: pemisah argumen ';', pemisah kolom array '\'
@@ -33,11 +33,12 @@ TGL_TPL = f'IF(Rekap!$G$1="";{LATEST_LOG_DATE};TEXT(Rekap!$G$1;"yyyy-mm-dd"))'
 # di semua formula di bawah tidak bergeser.
 PRODUK_STOK = 'ARRAYFORMULA(IF(Log!D2:D="";"";"STOK "&Log!D2:D))'
 
-# Nama rak di Olsera ditulis tanpa spasi dan huruf kecil ("rack5"), sementara
-# web app memakai "Rak 5". Sama seperti awalan STOK, penyesuaian dilakukan di
-# tab output saja -- tabel racks di Supabase dan tampilan di HP tidak berubah.
-# Regex menerima "Rak 5", "rak5", maupun "rack2" yang sudah benar.
-RACK_OLSERA = 'ARRAYFORMULA(IF(Log!C2:C="";"";REGEXREPLACE(LOWER(Log!C2:C);"^\\s*rac?k\\s*";"rack")))'
+# Nama rak diteruskan apa adanya ke tab output. Sampai 2026-08-04 rak bernama
+# "Rak 1".."Rak 5" dan diubah ke format Olsera ("rack1") lewat REGEXREPLACE.
+# Sejak rak dinamai per lokasi ("Gudang Packaging", "Area Display", dst.) peta
+# itu tidak berlaku lagi -- nama di Olsera disamakan dengan nama di tabel racks.
+# Baris Log lama tetap tertulis "Rak 1".."Rak 3" (riwayat sengaja tidak diubah).
+RACK_OLSERA = 'Log!C2:C'
 
 # Log kini 9 kolom: A Waktu, B Staff, C Rak, D Produk, E Rincian, F Qty,
 # G Satuan, H ED, I SKU. Array literal di bawah SENGAJA menyusun ulang kolom

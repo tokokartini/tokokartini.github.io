@@ -54,7 +54,8 @@ create policy "delete open entries" on count_entries
   for delete to authenticated using (uploaded_at is null and auth.uid() = user_id);
 
 insert into racks (name, sort) values
-  ('Rak 1', 1), ('Rak 2', 2), ('Rak 3', 3), ('Rak 4', 4), ('Rak 5', 5)
+  ('Gudang Packaging', 1), ('Gudang Bahan Kue', 2), ('Gudang Ciherang', 3),
+  ('Area Display', 4), ('Gudang Dapur Cherry', 5)
 on conflict (name) do nothing;
 
 create table if not exists sync_runs (
