@@ -19,7 +19,8 @@ export default function Login() {
 
   return (
     <div className="card">
-      <h2>Masuk</h2>
+      <h3>Masuk</h3>
+      <p className="muted" style={{ margin: '-6px 0 18px' }}>Pakai akun yang dibuatkan admin.</p>
       <form onSubmit={submit}>
         <label>Username</label>
         <input value={username} onChange={(e) => setUsername(e.target.value)} autoCapitalize="none" required />
@@ -28,7 +29,9 @@ export default function Login() {
         {error && <p className="error">{error}</p>}
         <button className="primary" disabled={busy}>{busy ? 'Masuk…' : 'Masuk'}</button>
       </form>
-      <p className="muted">Belum punya akun? Minta dibuatkan admin.</p>
+      <p className="muted" style={{ marginBottom: 0, textAlign: 'center' }}>
+        Belum punya akun? Minta dibuatkan admin.
+      </p>
     </div>
   )
 }

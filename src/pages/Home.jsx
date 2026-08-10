@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
 
-export default function Home({ username, onStart }) {
+export default function Home({ onStart }) {
   const [racks, setRacks] = useState([])
   const [rack, setRack] = useState(localStorage.getItem('so-rack') || '')
 
@@ -20,16 +20,24 @@ export default function Home({ username, onStart }) {
 
   return (
     <div className="card">
-      <div className="row">
-        <p>Halo, {username}! Semangat ya 🔥</p>
-        <button className="secondary" onClick={() => supabase.auth.signOut()}>Keluar</button>
+      <p className="section-title">Rak yang dihitung</p>
+      {!racks.length && <p className="muted">Memuat daftar rak…</p>}
+      <div className="rack-list">
+        {racks.map((r) => (
+          <button
+            type="button"
+            key={r}
+            className={`rack-opt${r === rack ? ' on' : ''}`}
+            aria-pressed={r === rack}
+            onClick={() => setRack(r)}
+          >
+            <span className="dot" aria-hidden="true" />
+            {r}
+          </button>
+        ))}
       </div>
-      <label>Rak yang dihitung</label>
-      <select value={rack} onChange={(e) => setRack(e.target.value)}>
-        {racks.map((r) => <option key={r}>{r}</option>)}
-      </select>
       <button className="primary" disabled={!rack} onClick={() => { localStorage.setItem('so-rack', rack); onStart(rack) }}>
-        Mulai Hitung
+        Mulai Hitung →
       </button>
     </div>
   )

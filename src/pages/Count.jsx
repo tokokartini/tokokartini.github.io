@@ -4,7 +4,7 @@ import { groupProducts, filterGroups } from '../lib/groupProducts'
 import { useEntries } from '../lib/useEntries'
 import CountForm from '../components/CountForm'
 
-export default function Count({ session, username, rack, onChangeRack }) {
+export default function Count({ session, rack, onChangeRack }) {
   const [groups, setGroups] = useState([])
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(null) // { group, entry|null }
@@ -104,28 +104,38 @@ export default function Count({ session, username, rack, onChangeRack }) {
   return (
     <>
       <div className="card">
-        <div className="row">
-          <span>{username} · <b>{rack}</b> <span className="badge">{openEntries.length} item</span></span>
-          <button className="secondary" onClick={onChangeRack}>Ganti Rak</button>
-        </div>
+        <p className="section-title">
+          <span>{rack}</span>
+          <span className="spacer" />
+          <button className="secondary" onClick={onChangeRack}>Ganti rak</button>
+        </p>
         {uploadMsg && (
           <p className={uploadMsg.startsWith('ok:') ? 'ok' : 'error'}>{uploadMsg.slice(uploadMsg.indexOf(':') + 1)}</p>
         )}
-        <label>Cari produk</label>
-        <input placeholder="ketik nama produk…" value={query} onChange={(e) => setQuery(e.target.value)} />
+        <div className="search">
+          <span className="search-ico" aria-hidden="true">🔍</span>
+          <input
+            aria-label="Cari produk"
+            placeholder="Cari produk…"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+          />
+        </div>
         {results.map((g) => {
           const hint = hintFor(g.name)
           return (
             <div className="entry" key={g.name} onClick={() => openGroup(g)}>
-              <span>
+              <span className="name">
                 {g.name}
                 {hint && <><br /><span className="muted">{hint}</span></>}
               </span>
-              <span className="muted">{g.units.length} satuan</span>
+              <span className="muted" style={{ whiteSpace: 'nowrap' }}>{g.units.length} satuan</span>
             </div>
           )
         })}
-        {query.trim() && !results.length && <p className="muted">Tidak ada — cek master / minta sync.</p>}
+        {query.trim() && !results.length && (
+          <p className="muted" style={{ marginTop: 14 }}>Tidak ada — cek master / minta sync.</p>
+        )}
       </div>
 
       {open && (
@@ -143,14 +153,18 @@ export default function Count({ session, username, rack, onChangeRack }) {
       )}
 
       <div className="card">
-        <h3>Hasil rak ini</h3>
+        <p className="section-title">
+          <span>Hasil rak ini</span>
+          <span className="spacer" />
+          <span className="badge">{openEntries.length} item</span>
+        </p>
         {hapusMsg && (
           <p className={hapusMsg.startsWith('ok:') ? 'ok' : 'error'}>{hapusMsg.slice(hapusMsg.indexOf(':') + 1)}</p>
         )}
-        {!openEntries.length && <p className="muted">Belum ada.</p>}
+        {!openEntries.length && <p className="muted">Belum ada. Cari produk di atas untuk mulai hitung.</p>}
         {openEntries.map((e) => (
           <div className="entry" key={e.id} onClick={() => openFromEntry(e)}>
-            <span>{e.product_name}</span>
+            <span className="name">{e.product_name}</span>
             <span className="entry-act">
               <span className="qty">{Number(e.qty_total)}</span>
               <button
@@ -164,9 +178,20 @@ export default function Count({ session, username, rack, onChangeRack }) {
             </span>
           </div>
         ))}
-        <button className="primary" disabled={uploading || !openEntries.length} onClick={upload} style={{ marginTop: 12 }}>
-          {uploading ? 'Mengirim…' : '⬆️ Upload'}
-        </button>
+      </div>
+
+      {/* Upload nempel di bawah layar: setelah menghitung 30 produk, tombolnya tidak
+          perlu di-scroll dan jumlah entri selalu kelihatan. */}
+      <div className="actionbar">
+        <div className="actionbar-in">
+          <button className="primary" disabled={uploading || !openEntries.length} onClick={upload}>
+            {uploading
+              ? 'Mengirim…'
+              : openEntries.length
+                ? `⬆️ Upload ${openEntries.length} entri`
+                : '⬆️ Upload'}
+          </button>
+        </div>
       </div>
     </>
   )

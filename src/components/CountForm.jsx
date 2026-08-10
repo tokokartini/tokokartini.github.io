@@ -27,23 +27,41 @@ export default function CountForm({ group, initial, colleagueHint, onSave, onCan
     setBusy(false)
   }
 
+  // Lembar naik dari bawah layar, bukan kartu di tengah daftar: satu produk =
+  // satu layar penuh, jempol tetap di dekat tombol Simpan.
   return (
-    <div className="card">
-      <h3>{group.name}</h3>
-      {colleagueHint && <p className="muted">{colleagueHint}</p>}
-      {units.map((u) => (
-        <div className="unit-row" key={u.sku}>
-          <label>{u.variant} <span className="muted">×{u.mult}</span></label>
-          <input type="number" inputMode="numeric" min="0" value={u.qty} onChange={(e) => setQty(u.sku, e.target.value)} />
+    <div
+      className="sheet-wrap"
+      role="dialog"
+      aria-modal="true"
+      aria-label={group.name}
+      onClick={(e) => { if (e.target === e.currentTarget && !busy) onCancel() }}
+    >
+      <div className="sheet">
+        <div className="sheet-grip" aria-hidden="true" />
+        <h3>{group.name}</h3>
+        {colleagueHint && <p className="muted" style={{ marginTop: -6 }}>{colleagueHint}</p>}
+        <div style={{ marginTop: 14 }}>
+          {units.map((u) => (
+            <div className="unit-row" key={u.sku}>
+              <label>{u.variant} <span className="muted">×{u.mult}</span></label>
+              <input type="number" inputMode="numeric" min="0" value={u.qty} onChange={(e) => setQty(u.sku, e.target.value)} />
+            </div>
+          ))}
         </div>
-      ))}
-      <label>Tanggal ED (opsional)</label>
-      <input type="date" value={expired} onChange={(e) => setExpired(e.target.value)} />
-      <p className="total">{totalQty(units)}</p>
-      {error && <p className="error">{error}</p>}
-      <div className="actions">
-        <button className="primary" disabled={busy} onClick={save}>{busy ? 'Menyimpan…' : 'Simpan'}</button>
-        <button className="secondary" disabled={busy} onClick={onCancel}>Batal</button>
+        <div className="total-box">
+          <span className="lbl">Total</span>
+          <p className="total">{totalQty(units)}</p>
+        </div>
+        <label>Tanggal ED (opsional)</label>
+        <input type="date" value={expired} onChange={(e) => setExpired(e.target.value)} />
+        {error && <p className="error">{error}</p>}
+        <div className="actions">
+          {/* Urutan Simpan-lalu-Batal dipertahankan dari versi lama — jangan ditukar,
+              karyawan sudah hafal posisi jempolnya. */}
+          <button className="primary" disabled={busy} onClick={save}>{busy ? 'Menyimpan…' : 'Simpan'}</button>
+          <button className="secondary" disabled={busy} onClick={onCancel}>Batal</button>
+        </div>
       </div>
     </div>
   )

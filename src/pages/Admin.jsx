@@ -35,7 +35,7 @@ async function fetchAllEntries() {
   return all
 }
 
-export default function Admin({ username }) {
+export default function Admin() {
   const [entries, setEntries] = useState(null)
   const [racks, setRacks] = useState([])
   const [loadErr, setLoadErr] = useState(false)
@@ -92,6 +92,13 @@ export default function Admin({ username }) {
   const racksView = useMemo(() => (entries ? rackProgress(entries, racks) : []), [entries, racks])
   const staff = useMemo(() => (entries ? staffActivity(entries) : []), [entries])
   const latest = useMemo(() => (entries ? latestEntries(entries) : []), [entries])
+  const total = useMemo(
+    () => ({
+      hariIni: staff.reduce((n, a) => n + a.today, 0),
+      terbuka: staff.reduce((n, a) => n + a.open, 0),
+    }),
+    [staff],
+  )
 
   async function createAccount(e) {
     e.preventDefault()
@@ -153,13 +160,22 @@ export default function Admin({ username }) {
 
   return (
     <>
-      <div className="card">
-        <div className="row">
-          <p>Halo, {username}! Dashboard SO 📊</p>
-          <button className="secondary" onClick={() => supabase.auth.signOut()}>Keluar</button>
+      {entries !== null && (
+        <div className="stats">
+          <div className="stat">
+            <div className="n">{total.hariIni}</div>
+            <div className="l">hari ini</div>
+          </div>
+          <div className="stat">
+            <div className="n" style={{ color: 'var(--orange)' }}>{total.terbuka}</div>
+            <div className="l">belum upload</div>
+          </div>
+          <div className="stat">
+            <div className="n">{staff.length}</div>
+            <div className="l">karyawan</div>
+          </div>
         </div>
-        <button className="secondary" onClick={load}>Muat ulang</button>
-      </div>
+      )}
 
       {loadErr && (
         <div className="card">
@@ -172,38 +188,56 @@ export default function Admin({ username }) {
       {entries !== null && (
         <>
           <div className="card">
-            <h2>Progress rak <span className="muted">(30 hari terakhir)</span></h2>
-            {racksView.map((r) => (
-              <div className="row" key={r.rack}>
-                <span>{r.rack}</span>
-                <span className="muted">
-                  {r.open + r.uploaded === 0
-                    ? 'belum dihitung'
-                    : `${r.open} entri terbuka · ${r.uploaded} terupload · terakhir ${jam(r.lastAt)}`}
-                </span>
-              </div>
-            ))}
+            <p className="section-title">
+              <span>Progress rak · 30 hari</span>
+              <span className="spacer" />
+              <button className="secondary" onClick={load}>Muat ulang</button>
+            </p>
+            {racksView.map((r) => {
+              const jml = r.open + r.uploaded
+              // Bar dua warna: hijau = sudah terupload, oranye = masih terbuka.
+              const pUp = jml ? (r.uploaded / jml) * 100 : 0
+              const pOpen = jml ? (r.open / jml) * 100 : 0
+              return (
+                <div className="rack-stat" key={r.rack}>
+                  <div className="top">
+                    <span className="nm">{r.rack}</span>
+                    <span className="muted">{jml === 0 ? 'belum dihitung' : `${jml} entri`}</span>
+                  </div>
+                  {jml > 0 && (
+                    <>
+                      <div className="bar">
+                        <i className="up" style={{ width: `${pUp}%` }} />
+                        <i className="open" style={{ width: `${pOpen}%` }} />
+                      </div>
+                      <span className="muted">
+                        {r.uploaded} terupload · {r.open} terbuka · terakhir {jam(r.lastAt)}
+                      </span>
+                    </>
+                  )}
+                </div>
+              )
+            })}
           </div>
 
           <div className="card">
-            <h2>Aktivitas karyawan</h2>
+            <p className="section-title">Aktivitas karyawan</p>
             {staff.length === 0 && <p className="muted">Belum ada entri</p>}
             {staff.map((a) => (
-              <div className="row" key={a.username}>
-                <span>{a.username}</span>
-                <span className="muted">
-                  {a.today} hari ini · {a.total} total{a.open > 0 ? ` · ${a.open} belum di-upload` : ''} · terakhir {jam(a.lastAt)}
-                </span>
+              <div className="data-row" key={a.username}>
+                <span className="k">{a.username}</span>
+                {a.open > 0 && <span className="badge soft">{a.open} belum upload</span>}
+                <span className="v">{a.today} hari ini · {a.total} total · {jam(a.lastAt)}</span>
               </div>
             ))}
           </div>
 
           <div className="card">
-            <h2>Entri terbaru</h2>
+            <p className="section-title">Entri terbaru</p>
             {latest.map((e, i) => (
-              <div className="row" key={i}>
-                <span>{e.product_name}</span>
-                <span className="muted">{e.qty_total} · {e.rack} · {e.username} · {jam(e.created_at)}</span>
+              <div className="data-row" key={i}>
+                <span className="k">{e.product_name}</span>
+                <span className="v">{e.qty_total} · {e.rack} · {e.username} · {jam(e.created_at)}</span>
               </div>
             ))}
           </div>
@@ -211,10 +245,10 @@ export default function Admin({ username }) {
       )}
 
       <div className="card">
-        <h2>Produk</h2>
-        {syncErr && <p className="error">Gagal memuat riwayat sync — coba muat ulang halaman</p>}
+        <p className="section-title">Produk</p>
+        {syncErr &&<p className="error">Gagal memuat riwayat sync — coba muat ulang halaman</p>}
         {!syncErr && (
-          <p className={syncStale(sync) ? 'error' : 'muted'}>
+          <p className={syncStale(sync) ? 'error' : 'muted'} style={{ marginBottom: 12 }}>
             {sync
               ? `terakhir sync: ${jam(sync.ran_at)} (${sync.source}) · ${
                   sync.ok
@@ -225,16 +259,16 @@ export default function Admin({ username }) {
             {syncStale(sync) ? ' — cek job malam' : ''}
           </p>
         )}
-        <button className="secondary" disabled={syncBusy} onClick={syncProduk}>
-          {syncBusy ? 'Menarik data…' : 'Sync produk'}
-        </button>
         {syncMsg && (
           <p className={syncMsg.startsWith('ok:') ? 'ok' : 'error'}>{syncMsg.slice(syncMsg.indexOf(':') + 1)}</p>
         )}
+        <button className="secondary" disabled={syncBusy} onClick={syncProduk}>
+          {syncBusy ? 'Menarik data…' : '🔄 Sync produk'}
+        </button>
       </div>
 
       <div className="card">
-        <h2>Kelola akun</h2>
+        <p className="section-title">Kelola akun</p>
         <form onSubmit={createAccount}>
           <label>Username</label>
           <input value={newUser} onChange={(e) => setNewUser(e.target.value)} required />
@@ -247,15 +281,15 @@ export default function Admin({ username }) {
         {msg && (
           <p className={msg.startsWith('ok:') ? 'ok' : 'error'}>{msg.slice(msg.indexOf(':') + 1)}</p>
         )}
-        <h2>Akun terdaftar</h2>
+        <p className="section-title" style={{ marginTop: 22 }}>Akun terdaftar</p>
         {acctErr && <p className="error">Gagal memuat daftar akun — coba muat ulang halaman</p>}
         {!acctErr && accounts.length === 0 && <p className="muted">Belum ada akun</p>}
         {accounts.map((u) => {
           const uname = u.email.split('@')[0]
           const barisAdmin = u.email === 'admin@tokokartini.app'
           return (
-            <div className="row" key={u.email}>
-              <span>
+            <div className="data-row" key={u.email}>
+              <span className="k">
                 {uname}
                 {u.banned && <span className="muted"> · nonaktif</span>}
               </span>
