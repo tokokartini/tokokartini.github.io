@@ -2,29 +2,76 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import { groupProducts, filterGroups } from '../lib/groupProducts'
 import { useEntries } from '../lib/useEntries'
+import { bacaCache, tulisCache, cacheMasihSah, PRODUCT_COLUMNS } from '../lib/productCache'
 import CountForm from '../components/CountForm'
 
 export default function Count({ session, rack, onChangeRack }) {
   const [groups, setGroups] = useState([])
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(null) // { group, entry|null }
+  const [produkMsg, setProdukMsg] = useState('')
   const { entries, othersOpen, saveEntry, deleteEntry, refresh } = useEntries(rack, session)
   const [uploadMsg, setUploadMsg] = useState('')
   const [uploading, setUploading] = useState(false)
   const [hapusMsg, setHapusMsg] = useState('')
   const [hapusBusy, setHapusBusy] = useState(0)
 
+  // Daftar produk: pakai cache lebih dulu supaya layar langsung terisi, lalu cek
+  // ke server apakah cache masih sama. Kalau sama, ~2772 baris tidak diunduh
+  // sama sekali — cukup dua permintaan kecil (penanda sync + jumlah produk).
   useEffect(() => {
-    let all = []
-    async function load(offset = 0) {
-      const { data } = await supabase
-        .from('products').select('*').eq('active', true)
-        .range(offset, offset + 999)
-      all = all.concat(data || [])
-      if ((data || []).length === 1000) return load(offset + 1000)
-      setGroups(groupProducts(all))
+    let batal = false
+
+    async function unduhSemua() {
+      let all = []
+      for (let offset = 0; ; offset += 1000) {
+        const { data, error } = await supabase
+          .from('products').select(PRODUCT_COLUMNS).eq('active', true)
+          .range(offset, offset + 999)
+        if (error) throw error
+        all = all.concat(data || [])
+        if ((data || []).length < 1000) return all
+      }
     }
+
+    async function penandaServer() {
+      const [sync, jml] = await Promise.all([
+        supabase.from('sync_runs').select('ran_at').eq('ok', true)
+          .order('ran_at', { ascending: false }).limit(1),
+        supabase.from('products').select('sku', { count: 'exact', head: true }).eq('active', true),
+      ])
+      if (sync.error || jml.error) throw sync.error || jml.error
+      return { stamp: sync.data?.[0]?.ran_at ?? null, count: jml.count }
+    }
+
+    async function load() {
+      const cache = bacaCache()
+      if (cache && !batal) {
+        setGroups(groupProducts(cache.products))
+        setProdukMsg('')
+      }
+      try {
+        const fresh = await penandaServer()
+        if (batal) return
+        if (cacheMasihSah(cache, fresh)) return
+        const all = await unduhSemua()
+        if (batal) return
+        setGroups(groupProducts(all))
+        tulisCache(fresh.stamp, all)
+        setProdukMsg('')
+      } catch {
+        // Gagal ke server: kalau cache ada, hitungan tetap jalan pakai daftar lama.
+        if (batal) return
+        setProdukMsg(
+          cache
+            ? 'Daftar produk dari simpanan HP — sinyal sedang bermasalah, produk baru mungkin belum ada.'
+            : 'Gagal memuat daftar produk — cek sinyal, lalu muat ulang halaman.',
+        )
+      }
+    }
+
     load()
+    return () => { batal = true }
   }, [])
 
   const results = useMemo(() => filterGroups(groups, query).slice(0, 20), [groups, query])
@@ -133,8 +180,13 @@ export default function Count({ session, rack, onChangeRack }) {
             </div>
           )
         })}
+        {produkMsg && <p className="error" style={{ marginTop: 12 }}>{produkMsg}</p>}
         {query.trim() && !results.length && (
-          <p className="muted" style={{ marginTop: 14 }}>Tidak ada — cek master / minta sync.</p>
+          <p className="muted" style={{ marginTop: 14 }}>
+            {groups.length
+              ? 'Tidak ada — cek master / minta sync.'
+              : 'Daftar produk belum siap, tunggu sebentar…'}
+          </p>
         )}
       </div>
 
