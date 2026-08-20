@@ -46,17 +46,25 @@ create index if not exists movements_jenis_idx
 
 alter table movements enable row level security;
 
+-- Tiap policy dibuang dulu supaya berkas ini aman dijalankan ulang: create policy
+-- tidak punya varian IF NOT EXISTS, jadi tanpa drop, percobaan kedua berhenti
+-- dengan galat "policy already exists".
+--
 -- Pola izin disamakan dengan count_entries: baca terbuka (dashboard admin nanti
 -- membacanya), tulis/ubah/hapus terkunci ke milik sendiri dan hanya selama entri
 -- belum terkirim ke sheet.
+drop policy if exists "read movements" on movements;
 create policy "read movements" on movements
   for select to authenticated using (true);
+drop policy if exists "insert own movements" on movements;
 create policy "insert own movements" on movements
   for insert to authenticated with check (auth.uid() = user_id and uploaded_at is null);
+drop policy if exists "update open movements" on movements;
 create policy "update open movements" on movements
   for update to authenticated
   using (uploaded_at is null and auth.uid() = user_id)
   with check (uploaded_at is null and auth.uid() = user_id);
+drop policy if exists "delete open movements" on movements;
 create policy "delete open movements" on movements
   for delete to authenticated
   using (uploaded_at is null and auth.uid() = user_id);
