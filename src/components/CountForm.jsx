@@ -1,7 +1,10 @@
 import { useState } from 'react'
 import { totalQty } from '../lib/convert'
 
-export default function CountForm({ group, initial, colleagueHint, onSave, onCancel }) {
+// `showExpired` dimatikan halaman Pengeluaran: tanggal ED milik stock opname, tidak
+// ada artinya untuk barang yang cuma pindah rak. Lembar isian jumlahnya sendiri
+// dipakai bersama supaya kedua halaman tidak pernah punya aturan satuan berbeda.
+export default function CountForm({ group, initial, colleagueHint, subtitle, showExpired = true, saveLabel = 'Simpan', onSave, onCancel }) {
   const [units, setUnits] = useState(
     group.units.map((u) => {
       const prev = initial?.units?.find((x) => x.sku === u.sku)
@@ -40,6 +43,7 @@ export default function CountForm({ group, initial, colleagueHint, onSave, onCan
       <div className="sheet">
         <div className="sheet-grip" aria-hidden="true" />
         <h3>{group.name}</h3>
+        {subtitle && <p className="muted" style={{ marginTop: -6 }}>{subtitle}</p>}
         {colleagueHint && <p className="muted" style={{ marginTop: -6 }}>{colleagueHint}</p>}
         <div style={{ marginTop: 14 }}>
           {units.map((u) => (
@@ -53,13 +57,17 @@ export default function CountForm({ group, initial, colleagueHint, onSave, onCan
           <span className="lbl">Total</span>
           <p className="total">{totalQty(units)}</p>
         </div>
-        <label>Tanggal ED (opsional)</label>
-        <input type="date" value={expired} onChange={(e) => setExpired(e.target.value)} />
+        {showExpired && (
+          <>
+            <label>Tanggal ED (opsional)</label>
+            <input type="date" value={expired} onChange={(e) => setExpired(e.target.value)} />
+          </>
+        )}
         {error && <p className="error">{error}</p>}
         <div className="actions">
           {/* Urutan Simpan-lalu-Batal dipertahankan dari versi lama — jangan ditukar,
               karyawan sudah hafal posisi jempolnya. */}
-          <button className="primary" disabled={busy} onClick={save}>{busy ? 'Menyimpan…' : 'Simpan'}</button>
+          <button className="primary" disabled={busy} onClick={save}>{busy ? 'Menyimpan…' : saveLabel}</button>
           <button className="secondary" disabled={busy} onClick={onCancel}>Batal</button>
         </div>
       </div>

@@ -405,3 +405,69 @@ button.hapus:active:not(:disabled) { background: var(--error-bg); }
 .bar i { display: block; height: 100%; }
 .bar i.up { background: var(--green); }
 .bar i.open { background: var(--orange); }
+
+/* ── Menu halaman depan ──────────────────────────────────────────────────── */
+/* Tombol dua baris: judul pekerjaan + penjelasan sebaris. Isi ulang display
+   dapat varian .utama karena itu yang dikerjakan tiap hari. */
+.menu-opt {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%; text-align: left;
+  padding: 15px 14px;
+  background: var(--bg-2);
+  border: 1.5px solid var(--border);
+  border-radius: var(--r);
+  color: var(--text);
+  margin-bottom: 8px;
+}
+.menu-opt:active { background: var(--border); }
+.menu-opt .ico {
+  width: 40px; height: 40px; flex: none;
+  display: grid; place-items: center;
+  border-radius: 12px;
+  background: var(--green-100);
+  font-size: 1.2rem;
+}
+.menu-opt .t { display: block; font-size: 0.98rem; font-weight: 700; line-height: 1.25; }
+.menu-opt .s { display: block; font-size: 0.78rem; font-weight: 500; color: var(--muted); line-height: 1.35; margin-top: 2px; }
+.menu-opt .arw { margin-left: auto; color: var(--muted); font-size: 1.1rem; }
+.menu-opt.utama { border-color: var(--green); background: var(--green-100); }
+.menu-opt.utama .ico { background: var(--card); }
+.menu-opt.utama .t { color: var(--green); }
+
+.menu-sep {
+  display: flex; align-items: center; gap: 8px;
+  margin: 16px 0 10px;
+  font-size: 0.7rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.07em;
+  color: var(--muted);
+}
+.menu-sep::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+/* ── Lokasi terkunci (halaman surat jalan) ───────────────────────────────── */
+/* Sisi yang sudah ditentukan jenis surat jalan ditampilkan, bukan dipilih --
+   isi ulang selalu ke Area Display, barang datang selalu dari supplier. */
+.fixed-loc {
+  display: flex; align-items: center; gap: 11px;
+  padding: 13px 14px;
+  border-radius: var(--r);
+  background: var(--green-100);
+  border: 1.5px solid var(--green);
+  color: var(--green);
+  font-weight: 700; font-size: 0.95rem;
+}
+.fixed-loc .ico {
+  width: 32px; height: 32px; flex: none;
+  display: grid; place-items: center;
+  border-radius: 10px;
+  background: var(--card);
+  font-size: 1rem;
+}
+.fixed-loc .tail {
+  margin-left: auto;
+  font-size: 0.68rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.06em;
+  opacity: 0.7;
+}
+
+.rack-opt:disabled { opacity: 0.4; }
+.rack-opt .tail { margin-left: auto; font-size: 0.72rem; font-weight: 600; color: var(--muted); }

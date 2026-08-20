@@ -3,11 +3,17 @@ import { supabase } from './lib/supabase'
 import Login from './pages/Login'
 import Home from './pages/Home'
 import Count from './pages/Count'
+import Keluar from './pages/Keluar'
 import Admin from './pages/Admin'
+import { MODES } from './lib/mutasi'
 
 export default function App() {
   const [session, setSession] = useState(undefined)
   const [rack, setRack] = useState(null)
+  // Halaman surat jalan yang sedang dibuka ('display' | 'datang' | 'gudang'), atau
+  // null kalau petugas masih di menu. Sengaja terpisah dari `rack` supaya alur SO
+  // tidak berubah sedikit pun.
+  const [modeKey, setModeKey] = useState(null)
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => setSession(data.session))
@@ -26,9 +32,11 @@ export default function App() {
     ? 'Toko Kartini'
     : isAdmin
       ? 'Dashboard admin'
-      : rack
-        ? `${username} · ${rack}`
-        : `Halo, ${username}! Semangat ya 🔥`
+      : modeKey
+        ? `${username} · ${MODES[modeKey].judul}`
+        : rack
+          ? `${username} · ${rack}`
+          : `Halo, ${username}! Semangat ya 🔥`
 
   return (
     <>
@@ -49,11 +57,16 @@ export default function App() {
         </div>
       </header>
 
-      <main className={`page${session && !isAdmin && rack ? ' has-actionbar' : ''}`}>
+      <main className={`page${session && !isAdmin && (rack || modeKey) ? ' has-actionbar' : ''}`}>
         {!session && <Login />}
         {session && isAdmin && <Admin username={username} />}
-        {session && !isAdmin && !rack && <Home username={username} onStart={setRack} />}
-        {session && !isAdmin && rack && (
+        {session && !isAdmin && !rack && !modeKey && (
+          <Home username={username} onStart={setRack} onKeluar={setModeKey} />
+        )}
+        {session && !isAdmin && modeKey && (
+          <Keluar session={session} modeKey={modeKey} onSelesai={() => setModeKey(null)} />
+        )}
+        {session && !isAdmin && rack && !modeKey && (
           <Count session={session} username={username} rack={rack} onChangeRack={() => setRack(null)} />
         )}
       </main>
