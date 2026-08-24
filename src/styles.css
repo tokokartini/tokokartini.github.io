@@ -499,3 +499,7 @@ button.hapus:active:not(:disabled) { background: var(--error-bg); }
 
 .rack-opt:disabled { opacity: 0.4; }
 .rack-opt .tail { margin-left: auto; font-size: 0.72rem; font-weight: 600; color: var(--muted); }
+
+/* Dua tombol berdampingan di baris akun; menyempit sendiri di layar HP. */
+.akun-aksi { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+.akun-aksi .secondary { padding: 7px 11px; font-size: 0.82rem; }

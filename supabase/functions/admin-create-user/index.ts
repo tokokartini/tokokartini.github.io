@@ -67,6 +67,28 @@ Deno.serve(async (req) => {
       return json({ ok: true, username: uname })
     }
 
+    if (action === 'resetpassword') {
+      const targetEmail = String(email ?? '').trim().toLowerCase()
+      if (!targetEmail.endsWith('@tokokartini.app'))
+        return json({ ok: false, error: 'Akun ini tidak dikelola dari sini' })
+      const uname = targetEmail.slice(0, -'@tokokartini.app'.length)
+      // Password admin SENGAJA tidak bisa diganti dari web. Kalau salah ketik, tidak
+      // ada lagi yang bisa masuk untuk membetulkannya -- jalur terminal
+      // (scripts/ganti_password.sh) harus tetap jadi pintu pemulihan.
+      if (targetEmail === ADMIN_EMAIL)
+        return json({ ok: false, error: 'Password admin diganti lewat GANTI PASSWORD.sh, bukan dari sini' })
+      const pass = String(password ?? '')
+      if (pass.length < 8)
+        return json({ ok: false, error: 'Password minimal 8 karakter' })
+      const hasil = await semuaUser()
+      if (!hasil.ok) return json({ ok: false, error: hasil.error })
+      const target = hasil.users.find((u) => u.email === targetEmail)
+      if (!target) return json({ ok: false, error: 'Akun tidak ditemukan' })
+      const { error } = await admin.auth.admin.updateUserById(target.id, { password: pass })
+      if (error) return json({ ok: false, error: error.message })
+      return json({ ok: true, username: uname })
+    }
+
     if (action === 'deactivate' || action === 'reactivate') {
       const targetEmail = String(email ?? '').trim().toLowerCase()
       if (!targetEmail.endsWith('@tokokartini.app'))

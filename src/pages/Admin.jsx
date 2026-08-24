@@ -45,6 +45,9 @@ export default function Admin() {
   const [acctBusy, setAcctBusy] = useState('')
   const [newUser, setNewUser] = useState('')
   const [newPass, setNewPass] = useState('')
+  // Akun yang sedang diganti passwordnya ({ uname, email }), plus isian barunya.
+  const [gantiPass, setGantiPass] = useState(null)
+  const [passBaru, setPassBaru] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState('')
 
@@ -140,6 +143,28 @@ export default function Admin() {
       else if (data.mode === 'banned') setMsg(`ok:Akun ${uname} dinonaktifkan — ${data.entries} entri SO tetap tersimpan`)
       else setMsg(`ok:Akun ${uname} diaktifkan lagi`)
       await loadAccounts()
+    } finally {
+      setAcctBusy('')
+    }
+  }
+
+  async function simpanPassBaru(e) {
+    e.preventDefault()
+    if (passBaru.length < 8) { setMsg('err:Password minimal 8 karakter'); return }
+    setAcctBusy(gantiPass.uname)
+    setMsg('')
+    try {
+      const { data, error } = await supabase.functions.invoke('admin-create-user', {
+        body: { action: 'resetpassword', email: gantiPass.email, password: passBaru },
+      })
+      if (error || !data?.ok) setMsg(`err:${data?.error || 'Gagal ganti password — coba lagi'}`)
+      else {
+        // Passwordnya ditampilkan sekali di sini supaya admin bisa membacakannya ke
+        // karyawan. Tidak disimpan ke mana pun, dan hilang begitu halaman dimuat ulang.
+        setMsg(`ok:Password ${data.username} diganti jadi "${passBaru}" — catat/kirim sekarang, tidak bisa dilihat lagi`)
+        setGantiPass(null)
+        setPassBaru('')
+      }
     } finally {
       setAcctBusy('')
     }
@@ -296,17 +321,54 @@ export default function Admin() {
               {barisAdmin ? (
                 <span className="muted">akun admin</span>
               ) : (
-                <button
-                  className="secondary"
-                  disabled={!!acctBusy}
-                  onClick={() => ubahAkun(uname, u.email, u.banned ? 'reactivate' : 'deactivate')}
-                >
-                  {acctBusy === uname ? '…' : u.banned ? 'Aktifkan' : 'Hapus'}
-                </button>
+                <span className="akun-aksi">
+                  <button
+                    className="secondary"
+                    disabled={!!acctBusy}
+                    onClick={() => { setGantiPass({ uname, email: u.email }); setPassBaru(''); setMsg('') }}
+                  >
+                    Password
+                  </button>
+                  <button
+                    className="secondary"
+                    disabled={!!acctBusy}
+                    onClick={() => ubahAkun(uname, u.email, u.banned ? 'reactivate' : 'deactivate')}
+                  >
+                    {acctBusy === uname ? '…' : u.banned ? 'Aktifkan' : 'Hapus'}
+                  </button>
+                </span>
               )}
             </div>
           )
         })}
+        {gantiPass && (
+          <form onSubmit={simpanPassBaru} style={{ marginTop: 14 }}>
+            <label>Password baru untuk {gantiPass.uname} (min 8 karakter)</label>
+            <input
+              type="text"
+              value={passBaru}
+              onChange={(e) => setPassBaru(e.target.value)}
+              autoComplete="off"
+              autoFocus
+              required
+            />
+            <button className="primary" disabled={!!acctBusy || passBaru.length < 8}>
+              {acctBusy ? 'Menyimpan…' : `Ganti password ${gantiPass.uname}`}
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              style={{ marginTop: 8, width: '100%' }}
+              onClick={() => { setGantiPass(null); setPassBaru('') }}
+            >
+              Batal
+            </button>
+          </form>
+        )}
+        <p className="muted" style={{ marginTop: 14, marginBottom: 0 }}>
+          Password admin sendiri tetap diganti lewat <code>GANTI PASSWORD.sh</code> — kalau
+          salah ketik dari sini, tidak ada lagi yang bisa masuk untuk membetulkannya.
+        </p>
       </div>
     </>
   )
