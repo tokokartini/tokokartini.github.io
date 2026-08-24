@@ -23,6 +23,15 @@ import { bacaOutbox, gagalJaringan } from './lib/outbox'
 // jadi selang yang selangkah dengan cooldown itu bisa terus kena jawaban basi.
 const COBA_SAMBUNG_MS = 20000
 
+// Berapa lama menunggu jawaban `getSession()` sebelum membuka aplikasi dari cache.
+//
+// Kalau token sudah kedaluwarsa, auth-js mencoba menyegarkannya dengan backoff
+// bertingkat sampai ~30 detik sebelum menyerah. Tanpa sinyal, tiga puluh detik itu
+// dihabiskan karyawan menatap layar "Memuat...". Jadi begitu identitasnya dikenal,
+// aplikasi dibuka duluan dalam mode lokal; kalau ternyata sesinya masih sah, dia
+// naik sendiri begitu jawabannya datang.
+const BATAS_BOOT_MS = 1500
+
 export default function App() {
   const [session, setSession] = useState(undefined)
   const [rack, setRack] = useState(null)
@@ -33,8 +42,18 @@ export default function App() {
 
   useEffect(() => {
     let hidup = true
+    const tersimpan = bacaSesiLokal()
+    const jagaan = tersimpan
+      ? setTimeout(() => {
+        // Hanya kalau `getSession()` memang belum menjawab. Jawaban yang sudah
+        // masuk -- termasuk "belum pernah login" -- tidak boleh ditimpa.
+        if (hidup) setSession((lama) => (lama === undefined ? tersimpan : lama))
+      }, BATAS_BOOT_MS)
+      : null
+
     supabase.auth.getSession().then(({ data }) => {
       if (!hidup) return
+      clearTimeout(jagaan)
       // Belum pernah login -> null -> halaman Login. Pernah login tapi token
       // kedaluwarsa tanpa sinyal -> sesi lokal, kerjanya jalan terus.
       if (data.session) simpanSesiLokal(data.session)
@@ -48,7 +67,7 @@ export default function App() {
       if (s) simpanSesiLokal(s)
       setSession(pilihSesi(s, bacaSesiLokal()))
     })
-    return () => { hidup = false; sub.subscription.unsubscribe() }
+    return () => { hidup = false; clearTimeout(jagaan); sub.subscription.unsubscribe() }
   }, [])
 
   const tanpaSinyal = !!session?.lokal
@@ -88,13 +107,20 @@ export default function App() {
     setSession(null)
     setRack(null)
     setModeKey(null)
-    // Tanpa sinyal panggilan ini gagal SEBELUM sempat membuang sesi tersimpan, jadi
-    // slotnya dibersihkan sendiri setelahnya. Tanpa itu, karyawan yang menekan Keluar
-    // di gudang akan masuk lagi otomatis begitu ponselnya dapat sinyal.
-    supabase.auth
-      .signOut()
-      .catch(() => {})
-      .finally(() => lupakanSesiServer(import.meta.env.VITE_SUPABASE_URL))
+    // `signOut()` mencabut sesi di sisi server DAN membuangnya dari HP -- tapi cuma
+    // kalau sempat. Tanpa sinyal, dia lebih dulu tersangkut di percobaan penyegaran
+    // token auth-js (backoff sampai ~30 detik) lalu menyerah TANPA membersihkan
+    // slotnya, dan karyawan sudah lama menutup aplikasi. Akibatnya dia masuk lagi
+    // sendiri begitu ponselnya dapat sinyal.
+    const urlSb = import.meta.env.VITE_SUPABASE_URL
+    if (navigator.onLine) {
+      supabase.auth.signOut().catch(() => {}).finally(() => lupakanSesiServer(urlSb))
+    } else {
+      // Mencabut di server memang mustahil tanpa jaringan; yang penting sesinya
+      // hilang dari HP ini sekarang juga, bukan setengah menit lagi.
+      lupakanSesiServer(urlSb)
+      supabase.auth.signOut().catch(() => {})
+    }
   }
 
   if (session === undefined) return <p className="center">Memuat…</p>
@@ -133,8 +159,7 @@ export default function App() {
         </div>
         {tanpaSinyal && (
           <div className="offline-bar" role="status">
-            📴 Mode tanpa sinyal — kamu tetap bisa menghitung. Hitungan tersimpan di HP
-            dan terkirim sendiri begitu sinyal balik.
+            📴 Mode tanpa sinyal — hitungan tersimpan di HP, terkirim sendiri nanti.
           </div>
         )}
       </header>
