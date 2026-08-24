@@ -434,6 +434,19 @@ button.hapus:active:not(:disabled) { background: var(--error-bg); }
 }
 .menu-opt:active { background: var(--border); }
 .menu-opt:disabled { opacity: 0.5; }
+
+/* Kepala bagian yang bisa dibuka-tutup. Dipakai daftar "sudah terkirim": jarang
+   dilihat, jadi menutup diri supaya tidak mendorong daftar kerja ke bawah layar. */
+.disclose {
+  display: flex; align-items: center; gap: 8px;
+  width: 100%; text-align: left;
+  padding: 0; background: none; border: 0;
+  color: var(--muted);
+  font-size: 0.78rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+}
+.disclose .arw { color: var(--muted); font-size: 1rem; }
+/* Baris read-only: tidak bisa diketuk, jadi jangan berperilaku seperti tombol. */
+.entry.statis { cursor: default; opacity: 0.75; }
 .menu-opt:disabled:active { background: var(--bg-2); }
 .menu-opt .ico {
   width: 40px; height: 40px; flex: none;

@@ -5,6 +5,8 @@ import { useEntries } from '../lib/useEntries'
 import { useProducts } from '../lib/useProducts'
 import CountForm from '../components/CountForm'
 
+const BATAS_HASIL = 20
+
 export default function Count({ session, rack, tanpaSinyal, onChangeRack }) {
   const { groups, produkMsg } = useProducts()
   const [query, setQuery] = useState('')
@@ -15,9 +17,26 @@ export default function Count({ session, rack, tanpaSinyal, onChangeRack }) {
   const [uploading, setUploading] = useState(false)
   const [hapusMsg, setHapusMsg] = useState('')
   const [hapusBusy, setHapusBusy] = useState(0)
+  // Entri yang baru saja dihapus, ditahan untuk tombol Urungkan. Hapus di sini
+  // permanen -- tanpa jaring ini satu ketukan salah berarti produk itu harus
+  // dihitung ulang dari rak.
+  const [terhapus, setTerhapus] = useState(null)
+  const [urungBusy, setUrungBusy] = useState(false)
+  const [lihatTerkirim, setLihatTerkirim] = useState(false)
 
-  const results = useMemo(() => filterGroups(groups, query).slice(0, 20), [groups, query])
+  // Daftar dipotong supaya layar HP tidak dibanjiri ratusan baris. Jumlah penuhnya
+  // ikut disimpan: memotong diam-diam bikin karyawan menyimpulkan produknya tidak
+  // ada, lalu minta admin sync padahal cuma perlu mengetik satu kata lagi.
+  const cocok = useMemo(() => filterGroups(groups, query), [groups, query])
+  const results = useMemo(() => cocok.slice(0, BATAS_HASIL), [cocok])
   const openEntries = entries.filter((e) => !e.uploaded_at)
+  // Entri yang sudah masuk ke pusat. Dulu disembunyikan sama sekali, jadi karyawan
+  // tidak punya cara memastikan hitungannya benar-benar terkirim selain bertanya ke
+  // admin. Read-only: yang terupload memang tidak boleh diubah dari sini.
+  const terkirim = useMemo(
+    () => entries.filter((e) => e.uploaded_at).sort((a, b) => (b.uploaded_at > a.uploaded_at ? 1 : -1)),
+    [entries],
+  )
 
   // Baris antrian ikut ditampilkan bersama baris server, ditandai "menunggu
   // sinyal". Kalau disembunyikan, karyawan mengira hitungannya hilang lalu
@@ -96,19 +115,41 @@ export default function Count({ session, rack, tanpaSinyal, onChangeRack }) {
 
   async function hapusEntri(ev, entry) {
     ev.stopPropagation()
-    if (!window.confirm(
-      `Hapus "${entry.product_name}" dari ${rack}?\n\n` +
-        'Hitungannya dibuang dan tidak ikut ter-upload.',
-    )) return
     setHapusBusy(entry.id)
     setHapusMsg('')
+    setTerhapus(null)
     try {
       await deleteEntry(entry.id)
+      // Tidak ada dialog konfirmasi: satu ketukan salah dibatalkan lewat Urungkan,
+      // dan itu jauh lebih murah daripada memaksa semua orang menjawab "yakin?"
+      // puluhan kali per rak.
+      setTerhapus(entry)
       setHapusMsg('ok:Entri dihapus')
     } catch (err) {
       setHapusMsg(`err:${err.message}`)
     } finally {
       setHapusBusy(0)
+    }
+  }
+
+  async function urungkanHapus() {
+    if (!terhapus) return
+    setUrungBusy(true)
+    setHapusMsg('')
+    try {
+      const group = groups.find((g) => g.name === terhapus.product_name) || {
+        name: terhapus.product_name,
+        category: '',
+        brand: '',
+        units: (terhapus.units || []).map((u, i) => ({ ...u, unit_order: i })),
+      }
+      await saveEntry(group, terhapus.units, terhapus.expired_date, null)
+      setTerhapus(null)
+      setHapusMsg('ok:Entri dikembalikan')
+    } catch (err) {
+      setHapusMsg(`err:${err.message}`)
+    } finally {
+      setUrungBusy(false)
     }
   }
 
@@ -157,6 +198,12 @@ export default function Count({ session, rack, tanpaSinyal, onChangeRack }) {
             </div>
           )
         })}
+        {cocok.length > BATAS_HASIL && (
+          <p className="muted" style={{ marginTop: 10 }}>
+            Menampilkan {BATAS_HASIL} dari {cocok.length} produk yang cocok — ketik lebih
+            spesifik untuk mempersempit.
+          </p>
+        )}
         {produkMsg && <p className="error" style={{ marginTop: 12 }}>{produkMsg}</p>}
         {query.trim() && !results.length && (
           <p className="muted" style={{ marginTop: 14 }}>
@@ -188,7 +235,17 @@ export default function Count({ session, rack, tanpaSinyal, onChangeRack }) {
           <span className="badge">{daftar.length} item</span>
         </p>
         {hapusMsg && (
-          <p className={hapusMsg.startsWith('ok:') ? 'ok' : 'error'}>{hapusMsg.slice(hapusMsg.indexOf(':') + 1)}</p>
+          <p className={hapusMsg.startsWith('ok:') ? 'ok' : 'error'}>
+            {hapusMsg.slice(hapusMsg.indexOf(':') + 1)}
+            {terhapus && (
+              <>
+                {' '}
+                <button className="link" disabled={urungBusy} onClick={urungkanHapus}>
+                  {urungBusy ? 'Mengembalikan…' : `Urungkan "${terhapus.product_name}"`}
+                </button>
+              </>
+            )}
+          </p>
         )}
         {!daftar.length && <p className="muted">Belum ada. Cari produk di atas untuk mulai hitung.</p>}
         {daftar.map((e) => (
@@ -211,6 +268,35 @@ export default function Count({ session, rack, tanpaSinyal, onChangeRack }) {
           </div>
         ))}
       </div>
+
+      {terkirim.length > 0 && (
+        <div className="card">
+          <button className="disclose" aria-expanded={lihatTerkirim} onClick={() => setLihatTerkirim((v) => !v)}>
+            <span>Sudah terkirim ke pusat</span>
+            <span className="spacer" />
+            <span className="badge green">{terkirim.length}</span>
+            <span className="arw" aria-hidden="true">{lihatTerkirim ? '⌄' : '›'}</span>
+          </button>
+          {lihatTerkirim && (
+            <>
+              <p className="muted" style={{ marginTop: 10 }}>
+                Sudah terkunci — perbaikannya lewat admin, bukan dari sini.
+              </p>
+              {terkirim.map((e) => (
+                <div className="entry statis" key={e.id}>
+                  <span className="name">{e.product_name}</span>
+                  <span className="qty">{Number(e.qty_total)}</span>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      )}
+      {tanpaSinyal && !terkirim.length && (
+        <p className="muted" style={{ textAlign: 'center' }}>
+          Daftar "sudah terkirim" baru bisa dilihat kalau ada sinyal.
+        </p>
+      )}
 
       {/* Upload nempel di bawah layar: setelah menghitung 30 produk, tombolnya tidak
           perlu di-scroll dan jumlah entri selalu kelihatan. */}

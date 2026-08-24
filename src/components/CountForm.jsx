@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { totalQty } from '../lib/convert'
 
 // `showExpired` dimatikan halaman Pengeluaran: tanggal ED milik stock opname, tidak
@@ -14,6 +14,31 @@ export default function CountForm({ group, initial, colleagueHint, subtitle, sho
   const [expired, setExpired] = useState(initial?.expired_date || '')
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const kolomPertama = useRef(null)
+
+  // Fokus ke kolom jumlah pertama begitu lembar naik. Tanpa ini karyawan harus
+  // mengetuk kolomnya dulu -- satu ketukan ekstra dikali ratusan produk per SO.
+  //
+  // `preventScroll` supaya papan ketik naik tanpa lembar ikut melompat, dan diberi
+  // jeda satu frame supaya animasi naiknya tidak terpotong.
+  useEffect(() => {
+    const t = setTimeout(() => kolomPertama.current?.focus({ preventScroll: true }), 120)
+    return () => clearTimeout(t)
+  }, [])
+
+  // Esc menutup lembar.
+  //
+  // Tombol Back Android SENGAJA tidak ikut ditangani. Caranya harus `pushState` saat
+  // lembar naik lalu `history.back()` saat ditutup dari tombol Simpan/Batal, dan
+  // `back()` itu asinkron: kalau lembar berikutnya dibuka sebelum pop-nya mendarat,
+  // pop yang tertunda memakan entri lembar baru dan Back berikutnya MELEMPAR
+  // karyawan keluar dari halaman hitung. Terukur di uji Chrome. Back yang merusak
+  // lebih buruk daripada Back yang tidak melakukan apa-apa.
+  useEffect(() => {
+    const esc = (e) => { if (e.key === 'Escape' && !busy) onCancel() }
+    window.addEventListener('keydown', esc)
+    return () => window.removeEventListener('keydown', esc)
+  }, [busy, onCancel])
 
   function setQty(sku, qty) {
     setUnits((us) => us.map((u) => (u.sku === sku ? { ...u, qty } : u)))
@@ -46,10 +71,17 @@ export default function CountForm({ group, initial, colleagueHint, subtitle, sho
         {subtitle && <p className="muted" style={{ marginTop: -6 }}>{subtitle}</p>}
         {colleagueHint && <p className="muted" style={{ marginTop: -6 }}>{colleagueHint}</p>}
         <div style={{ marginTop: 14 }}>
-          {units.map((u) => (
+          {units.map((u, i) => (
             <div className="unit-row" key={u.sku}>
               <label>{u.variant} <span className="muted">×{u.mult}</span></label>
-              <input type="number" inputMode="numeric" min="0" value={u.qty} onChange={(e) => setQty(u.sku, e.target.value)} />
+              <input
+                ref={i === 0 ? kolomPertama : null}
+                type="number"
+                inputMode="numeric"
+                min="0"
+                value={u.qty}
+                onChange={(e) => setQty(u.sku, e.target.value)}
+              />
             </div>
           ))}
         </div>

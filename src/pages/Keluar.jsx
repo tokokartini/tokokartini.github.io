@@ -7,6 +7,8 @@ import { useRacks } from '../lib/racks'
 import { modeOf, lokasiPilihan, lokasiAwal, siapLanjut, seringDipakai } from '../lib/mutasi'
 import CountForm from '../components/CountForm'
 
+const BATAS_HASIL = 20
+
 // Halaman surat jalan: barang datang, isi ulang display, pindah antar gudang.
 // Tiga-tiganya alur yang sama -- yang berbeda cuma sisi lokasi mana yang sudah
 // terkunci -- jadi satu halaman, aturannya di src/lib/mutasi.js.
@@ -27,6 +29,9 @@ export default function Keluar({ session, modeKey, tanpaSinyal, onSelesai }) {
   const [kirimBusy, setKirimBusy] = useState(false)
   const [hapusMsg, setHapusMsg] = useState('')
   const [hapusBusy, setHapusBusy] = useState(0)
+  // Baris yang baru dicoret, ditahan untuk tombol Urungkan -- hapus di sini permanen.
+  const [terhapus, setTerhapus] = useState(null)
+  const [urungBusy, setUrungBusy] = useState(false)
 
   const { groups, produkMsg } = useProducts()
   const { items, pending, antrianMsg, saveItem, deleteItem, kirimAntrian } =
@@ -48,7 +53,8 @@ export default function Keluar({ session, modeKey, tanpaSinyal, onSelesai }) {
   }, [mode.key, mode.jenis])
 
   const pilihan = useMemo(() => lokasiPilihan(mode, racks), [mode, racks])
-  const hasil = useMemo(() => filterGroups(groups, query).slice(0, 20), [groups, query])
+  const cocok = useMemo(() => filterGroups(groups, query), [groups, query])
+  const hasil = useMemo(() => cocok.slice(0, BATAS_HASIL), [cocok])
   const seringGroups = useMemo(() => {
     if (mode.key !== 'display') return []
     return sering.map((s) => groups.find((g) => g.name === s.product_name)).filter(Boolean)
@@ -101,12 +107,33 @@ export default function Keluar({ session, modeKey, tanpaSinyal, onSelesai }) {
   async function hapus(item) {
     setHapusMsg('')
     setHapusBusy(item.id)
+    setTerhapus(null)
     try {
       await deleteItem(item.id)
+      setTerhapus(item)
     } catch (e) {
       setHapusMsg(e.message)
     }
     setHapusBusy(0)
+  }
+
+  async function urungkanHapus() {
+    if (!terhapus) return
+    setUrungBusy(true)
+    setHapusMsg('')
+    try {
+      const group = groups.find((g) => g.name === terhapus.product_name) || {
+        name: terhapus.product_name,
+        category: '',
+        brand: '',
+        units: (terhapus.units || []).map((u, i) => ({ ...u, unit_order: i })),
+      }
+      await saveItem(group, terhapus.units, mode.jenis, terhapus.nota || nota, null)
+      setTerhapus(null)
+    } catch (e) {
+      setHapusMsg(e.message)
+    }
+    setUrungBusy(false)
   }
 
   async function kirim() {
@@ -234,6 +261,12 @@ export default function Keluar({ session, modeKey, tanpaSinyal, onSelesai }) {
           hasil.length ? (
             <div style={{ marginTop: 8 }}>
               {hasil.map((g) => <BarisProduk key={g.name} group={g} items={daftar} onKlik={bukaProduk} />)}
+              {cocok.length > BATAS_HASIL && (
+                <p className="muted" style={{ marginTop: 10 }}>
+                  Menampilkan {BATAS_HASIL} dari {cocok.length} produk yang cocok — ketik
+                  lebih spesifik untuk mempersempit.
+                </p>
+              )}
             </div>
           ) : (
             <p className="muted" style={{ marginTop: 12 }}>Tidak ada produk yang cocok.</p>
@@ -263,6 +296,14 @@ export default function Keluar({ session, modeKey, tanpaSinyal, onSelesai }) {
         )}
         {antrianMsg && <p className="error">{antrianMsg}</p>}
         {hapusMsg && <p className="error">{hapusMsg}</p>}
+        {terhapus && (
+          <p className="ok">
+            "{terhapus.product_name}" dicoret.{' '}
+            <button className="link" disabled={urungBusy} onClick={urungkanHapus}>
+              {urungBusy ? 'Mengembalikan…' : 'Urungkan'}
+            </button>
+          </p>
+        )}
         {daftar.length === 0 && <p className="muted">Belum ada barang. Pilih produk di atas, lalu isi jumlahnya.</p>}
         {daftar.map((it) => (
           <div key={it.id} className="entry" onClick={() => bukaDariItem(it)}>
