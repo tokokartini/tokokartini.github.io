@@ -94,6 +94,26 @@ def pecah_satuan(v):
     return kata_satuan(m.group(1)), (None, kata_satuan(dalam))
 
 
+# Satuan takaran. Sengaja dipisah: `Pcs` boleh disamakan dengan `Kaleng` atau `Btl`
+# (sama-sama "satu buah"), tapi TIDAK PERNAH dengan `Gr` atau `Ml` -- di situ jumlahnya
+# jelas bukan 1 dan menebaknya berarti stok salah beberapa ratus kali lipat.
+TAKARAN = {"gr", "gram", "kg", "ons", "ml", "l", "liter", "cc", "cl"}
+
+# Kata Olsera untuk "satu buah". Master memakai kata khusus per produk (Kaleng, Btl,
+# Pack, Box); Sopian menegaskan 2026-08-24 itu barang satuan yang sama.
+SEBUTAN_SATUAN = {"pcs", "pc", "piece", "buah", "biji"}
+
+
+def gram(u):
+    """Berapa gram satu satuan, kalau satuannya memang berat tertulis. `250gr` -> 250."""
+    n = re.sub(r"\s+", "", str(u or "").lower()).replace(",", ".")
+    m = re.fullmatch(r"([\d.]*)(kg|gr|gram|g)", n)
+    if not m:
+        return None
+    angka = float(m.group(1)) if m.group(1) else 1.0
+    return angka * 1000 if m.group(2) == "kg" else angka
+
+
 def cocok_setara(varian_olsera, senama):
     """Cari satuan master yang PASTI kemasan yang sama. -> (mult, alasan) | (None, None).
 
@@ -126,6 +146,34 @@ def cocok_setara(varian_olsera, senama):
                     if pecah_satuan(p["variant"])[1] == io]
         if len(kandidat) == 1:
             return kandidat[0][1], kandidat[0][0]
+
+    # R5 Olsera menuliskan ukurannya, master menyebut satuannya polos.
+    #    `Botol (700 ML)` -> master `Botol`; `Toros (25 Pcs)` -> master `Trs`.
+    #    Dikonfirmasi Sopian 2026-08-24: itu kemasan yang sama, Olsera cuma memperjelas
+    #    ukurannya. Kandidat harus tunggal supaya master dengan dua `Pack` beda isi
+    #    tetap ambigu dan jatuh ke kolom manual.
+    if io is not None:
+        polos = [(p["variant"], float(p["mult"])) for p in senama
+                 if pecah_satuan(p["variant"])[0] == ko and pecah_satuan(p["variant"])[1] is None]
+        if len(polos) == 1:
+            return polos[0][1], polos[0][0]
+
+    # R6 Olsera menulis `Pcs`, master memakai kata khusus untuk satu buahnya
+    #    (`Kaleng`, `Btl`, `Pack`). Dikonfirmasi Sopian 2026-08-24.
+    #    Satuan takaran dikecualikan: `Pcs` lawan `Gr` bukan 1.
+    if io is None and ko in SEBUTAN_SATUAN and not sekata:
+        dasar = satuan_dasar(senama)
+        if dasar and kata_satuan(dasar["variant"]) not in TAKARAN and gram(dasar["variant"]) is None:
+            return float(dasar["mult"]), dasar["variant"]
+
+    # R7 dua-duanya berat tertulis -> pembagian biasa, bukan tebakan. `1Kg` / `250gr` = 4.
+    go = gram(varian_olsera)
+    if go:
+        berat = [(p["variant"], gram(p["variant"])) for p in senama if gram(p["variant"])]
+        dasar = satuan_dasar(senama)
+        if dasar and gram(dasar["variant"]) and float(dasar["mult"]) == 1:
+            return go / gram(dasar["variant"]), dasar["variant"]
+        del berat
     return None, None
 
 
@@ -280,6 +328,46 @@ def uji():
     tetap = {(b[0], b[1]): b for b in
              susun_peta(jual2, produk2, {("Fresh Milk", "Carton (12 Pcs)"): 99})[0]}
     assert tetap[("Fresh Milk", "Carton (12 Pcs)")][4] == 99, "isian manual tertimpa jalur setara"
+
+    # --- R5/R6/R7: jawaban Sopian 2026-08-24 dijadikan aturan ---
+    produk3 = [
+        {"sku": "H-1", "product_name": "Monin Lemon", "variant": "Botol", "mult": 1},
+        {"sku": "H-K", "product_name": "Monin Lemon", "variant": "Krtn (6 Botol)", "mult": 6},
+        {"sku": "I-1", "product_name": "Thinwall 35", "variant": "Trs", "mult": 1},
+        {"sku": "J-1", "product_name": "SKM Tiga Sapi", "variant": "Kaleng", "mult": 1},
+        {"sku": "J-K", "product_name": "SKM Tiga Sapi", "variant": "Krtn (48 Kaleng)", "mult": 48},
+        {"sku": "K-1", "product_name": "Wijen", "variant": "250gr", "mult": 1},
+        {"sku": "L-1", "product_name": "Telur Curah", "variant": "Gr", "mult": 1},
+        {"sku": "M-1", "product_name": "Kresek Dua", "variant": "Pack (50 Pcs)", "mult": 50},
+        {"sku": "M-2", "product_name": "Kresek Dua", "variant": "Pack (100 Pcs)", "mult": 100},
+        {"sku": "M-3", "product_name": "Kresek Dua", "variant": "Pcs", "mult": 1},
+    ]
+    jual3 = [
+        {"product": "Monin Lemon", "variant": "Botol (700 ML)", "omzet": 900},   # R5
+        {"product": "Thinwall 35", "variant": "Toros (50 Pcs)", "omzet": 800},   # R5 + sinonim
+        {"product": "SKM Tiga Sapi", "variant": "Pcs", "omzet": 700},            # R6
+        {"product": "Wijen", "variant": "1Kg", "omzet": 600},                    # R7
+        {"product": "Telur Curah", "variant": "Pcs", "omzet": 500},              # R6 ditolak
+        {"product": "Kresek Dua", "variant": "Pack (75 Pcs)", "omzet": 400},     # ambigu
+    ]
+    b3 = {(b[0], b[1]): b for b in susun_peta(jual3, produk3)[0]}
+
+    r5 = b3[("Monin Lemon", "Botol (700 ML)")]
+    assert r5[4] == 1 and r5[5].startswith(SETARA), f"R5 'Botol (700 ML)'->'Botol' gagal: {r5}"
+    r5b = b3[("Thinwall 35", "Toros (50 Pcs)")]
+    assert r5b[4] == 1 and r5b[5].startswith(SETARA), f"R5 'Toros (...)'->'Trs' gagal: {r5b}"
+    r6 = b3[("SKM Tiga Sapi", "Pcs")]
+    assert r6[4] == 1 and r6[5].startswith(SETARA), f"R6 'Pcs'->'Kaleng' gagal: {r6}"
+    r7 = b3[("Wijen", "1Kg")]
+    assert r7[4] == 4 and r7[5].startswith(SETARA), f"R7 1Kg/250gr harus 4: {r7}"
+
+    # R6 TIDAK boleh menyamakan `Pcs` dengan satuan takaran -- di situ jelas bukan 1.
+    tolak = b3[("Telur Curah", "Pcs")]
+    assert tolak[4] == "" and tolak[5] == ISI_MANUAL, f"'Pcs' lawan 'Gr' TIDAK boleh jadi 1: {tolak}"
+
+    # Master punya dua `Pack` beda isi -> ukuran yang tidak cocok tetap ambigu.
+    amb2 = b3[("Kresek Dua", "Pack (75 Pcs)")]
+    assert amb2[4] == "" and amb2[5] == ISI_MANUAL, f"pack ambigu TIDAK boleh ditebak: {amb2}"
 
     print("semua uji susun_peta LOLOS")
 
