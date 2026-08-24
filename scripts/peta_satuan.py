@@ -39,8 +39,23 @@ JUDUL = ["Produk Olsera", "Varian Olsera", "Produk Master", "Satuan Dasar Master
          "Isi", "Status", "Omzet"]
 
 OTOMATIS = "otomatis"
+SETARA = "otomatis (satuan disamakan)"
 ISI_MANUAL = "isi kolom Isi"
 TIDAK_ADA = "produk tidak ada di master"
+
+# Master dan Olsera menyebut kemasan yang sama dengan kata berbeda. Ini murni beda
+# kosakata, bukan tebakan isi: `Krtn (15 Kg)` dan `Carton (15 Kg)` kardus yang sama,
+# dan angkanya sudah ada di master. Sebelum daftar ini ada, 81 baris (71% omzet)
+# mendarat di kolom manual padahal jawabannya sudah tersimpan di master.
+SINONIM_SATUAN = {
+    "krtn": "carton", "ktn": "carton", "dus": "carton",
+    "trs": "toros", "tros": "toros",
+    "rol": "roll",
+    "btl": "botol",
+    "bks": "bungkus",
+    "pc": "pcs", "piece": "pcs",
+    "pak": "pack",
+}
 
 
 # --- Bagian murni ----------------------------------------------------------
@@ -54,6 +69,64 @@ def norm_nama(s):
 def norm_varian(s):
     # "1 Ons" dan "Ons" satuan yang sama; Olsera kadang menulis angka 1 di depan.
     return re.sub(r"^1(?=[a-z])", "", norm_nama(s))
+
+
+def kata_satuan(u):
+    """Kata satuan yang sudah disamakan kosakatanya. `Krtn` dan `Carton` -> 'carton'."""
+    n = re.sub(r"[^a-z0-9]", "", str(u or "").lower())
+    return SINONIM_SATUAN.get(n, n)
+
+
+def pecah_satuan(v):
+    """`Krtn (15 Kg)` -> ('carton', (15.0, 'kg')). Tanpa kurung -> (kata, None).
+
+    Isi kurung tanpa angka (`Botol (700 ML)` tetap punya angka; `Pack (Besar)` tidak)
+    dikembalikan sebagai (None, kata) supaya tidak pernah disamakan dengan angka.
+    """
+    v = str(v or "").strip()
+    m = re.fullmatch(r"([^()]+)\(([^)]*)\)", v)
+    if not m:
+        return kata_satuan(v), None
+    dalam = m.group(2).strip().lower()
+    d = re.fullmatch(r"([\d.,]+)\s*(.*)", dalam)
+    if d:
+        return kata_satuan(m.group(1)), (float(d.group(1).replace(",", ".")), kata_satuan(d.group(2)))
+    return kata_satuan(m.group(1)), (None, kata_satuan(dalam))
+
+
+def cocok_setara(varian_olsera, senama):
+    """Cari satuan master yang PASTI kemasan yang sama. -> (mult, alasan) | (None, None).
+
+    Empat aturan, semuanya menuntut bukti tertulis -- tidak ada yang menebak isi:
+
+      R1 kata satuan sama DAN isi kurungnya identik      Carton (12 Pcs) = Krtn (12 Pcs)
+      R2 Olsera menulis polos, master punya TEPAT SATU
+         satuan berkata itu                              Kg = Kg (1000 Gr)
+      R3 dua-duanya polos, katanya sama                  Rol = Roll
+      R4 kata satuan BEDA tapi isi kurung identik,
+         dan cuma satu kandidat                          Bal (25Kg) = Zak (25 Kg)
+
+    Yang sengaja TIDAK dicocokkan: isi kurung yang angkanya berbeda. `Carton (80pcs)`
+    lawan `Bal (100 Pcs)` tetap masuk kolom manual -- itu justru kasus yang bikin tab
+    ini dibuat.
+    """
+    ko, io = pecah_satuan(varian_olsera)
+    sekata = [(p["variant"], float(p["mult"])) for p in senama if pecah_satuan(p["variant"])[0] == ko]
+
+    for nama, mult in sekata:                                    # R1
+        if io is not None and pecah_satuan(nama)[1] == io:
+            return mult, nama
+    if io is None and len(sekata) == 1:                          # R2
+        return sekata[0][1], sekata[0][0]
+    for nama, mult in sekata:                                    # R3
+        if io is None and pecah_satuan(nama)[1] is None:
+            return mult, nama
+    if io is not None and io[0] is not None:                     # R4
+        kandidat = [(p["variant"], float(p["mult"])) for p in senama
+                    if pecah_satuan(p["variant"])[1] == io]
+        if len(kandidat) == 1:
+            return kandidat[0][1], kandidat[0][0]
+    return None, None
 
 
 def indeks_master(produk):
@@ -95,6 +168,9 @@ def susun_peta(penjualan, produk, peta_lama=None):
             isi, status = peta_lama[kunci], "diisi manual"
         elif cocok:
             isi, status = _rapi(float(cocok["mult"])), OTOMATIS
+        elif senama and cocok_setara(vo, senama)[0] is not None:
+            mult, dari = cocok_setara(vo, senama)
+            isi, status = _rapi(mult), f"{SETARA}: {dari}"
         elif senama:
             isi, status = "", ISI_MANUAL
         else:
@@ -110,7 +186,8 @@ def susun_peta(penjualan, produk, peta_lama=None):
 
     # Yang butuh tangan manusia naik ke atas, diurutkan omzet terbesar, supaya
     # mengisi dari baris pertama langsung menutup porsi omzet terbesar.
-    baris.sort(key=lambda b: (b[5] in (OTOMATIS, "diisi manual"), -float(b[6] or 0)))
+    baris.sort(key=lambda b: (b[5] in (OTOMATIS, "diisi manual") or b[5].startswith(SETARA),
+                              -float(b[6] or 0)))
     return baris, ringkas
 
 
@@ -160,6 +237,49 @@ def uji():
     lagi, _ = susun_peta(jual, produk, {("Botol SKLB 250ml", "Carton (80pcs)"): 80})
     ulang = {(b[0], b[1]): b for b in lagi}[("Botol SKLB 250ml", "Carton (80pcs)")]
     assert ulang[4] == 80 and ulang[5] == "diisi manual", f"isian manual tertimpa: {ulang}"
+
+    # --- kosakata satuan: master sudah tahu jawabannya, cuma katanya beda ---
+    produk2 = [
+        {"sku": "C-1", "product_name": "Fresh Milk", "variant": "Pcs", "mult": 1},
+        {"sku": "C-K", "product_name": "Fresh Milk", "variant": "Krtn (12 Pcs)", "mult": 12},
+        {"sku": "D-1", "product_name": "Telur", "variant": "Gr", "mult": 1},
+        {"sku": "D-K", "product_name": "Telur", "variant": "Kg (1000 Gr)", "mult": 1000},
+        {"sku": "E-1", "product_name": "Cup Sealer", "variant": "Roll", "mult": 1},
+        {"sku": "F-1", "product_name": "Creamer", "variant": "Kg", "mult": 1},
+        {"sku": "F-Z", "product_name": "Creamer", "variant": "Zak (25 Kg)", "mult": 25},
+        {"sku": "G-1", "product_name": "Thinwall", "variant": "Pcs", "mult": 1},
+        {"sku": "G-A", "product_name": "Thinwall", "variant": "Krtn (12 Pcs)", "mult": 12},
+        {"sku": "G-B", "product_name": "Thinwall", "variant": "Krtn (6 Pcs)", "mult": 6},
+    ]
+    jual2 = [
+        {"product": "Fresh Milk", "variant": "Carton (12 Pcs)", "omzet": 900},   # R1
+        {"product": "Telur", "variant": "Kg", "omzet": 800},                      # R2
+        {"product": "Cup Sealer", "variant": "Rol", "omzet": 700},                # R3
+        {"product": "Creamer", "variant": "Bal (25Kg)", "omzet": 600},            # R4
+        {"product": "Thinwall", "variant": "Carton", "omzet": 500},               # ambigu
+    ]
+    b2 = {(b[0], b[1]): b for b in susun_peta(jual2, produk2)[0]}
+
+    r1 = b2[("Fresh Milk", "Carton (12 Pcs)")]
+    assert r1[4] == 12 and r1[5].startswith(SETARA), f"R1 Krtn=Carton gagal: {r1}"
+    r2 = b2[("Telur", "Kg")]
+    assert r2[4] == 1000 and r2[5].startswith(SETARA), f"R2 'Kg' polos ke 'Kg (1000 Gr)' gagal: {r2}"
+    r3 = b2[("Cup Sealer", "Rol")]
+    assert r3[4] == 1 and r3[5].startswith(SETARA), f"R3 Rol=Roll gagal: {r3}"
+    r4 = b2[("Creamer", "Bal (25Kg)")]
+    assert r4[4] == 25 and r4[5].startswith(SETARA), f"R4 Bal(25Kg)=Zak(25 Kg) gagal: {r4}"
+
+    # Master punya DUA karton berbeda isi -> 'Carton' polos ambigu, jangan ditebak.
+    amb = b2[("Thinwall", "Carton")]
+    assert amb[4] == "" and amb[5] == ISI_MANUAL, f"karton ambigu TIDAK boleh ditebak: {amb}"
+
+    # Jebakan lama harus tetap ditolak walau kosakata sudah disamakan.
+    assert per_kunci[("Botol SKLB 250ml", "Carton (80pcs)")][5] == ISI_MANUAL
+
+    # Isian manusia tetap menang atas jalur setara.
+    tetap = {(b[0], b[1]): b for b in
+             susun_peta(jual2, produk2, {("Fresh Milk", "Carton (12 Pcs)"): 99})[0]}
+    assert tetap[("Fresh Milk", "Carton (12 Pcs)")][4] == 99, "isian manual tertimpa jalur setara"
 
     print("semua uji susun_peta LOLOS")
 
