@@ -3,17 +3,18 @@ import { supabase } from '../lib/supabase'
 import { filterGroups } from '../lib/groupProducts'
 import { useProducts } from '../lib/useProducts'
 import { useMovements } from '../lib/useMovements'
+import { useRacks } from '../lib/racks'
 import { modeOf, lokasiPilihan, lokasiAwal, siapLanjut, seringDipakai } from '../lib/mutasi'
 import CountForm from '../components/CountForm'
 
 // Halaman surat jalan: barang datang, isi ulang display, pindah antar gudang.
 // Tiga-tiganya alur yang sama -- yang berbeda cuma sisi lokasi mana yang sudah
 // terkunci -- jadi satu halaman, aturannya di src/lib/mutasi.js.
-export default function Keluar({ session, modeKey, onSelesai }) {
+export default function Keluar({ session, modeKey, tanpaSinyal, onSelesai }) {
   const mode = modeOf(modeKey)
   const awal = lokasiAwal(mode)
 
-  const [racks, setRacks] = useState([])
+  const racks = useRacks()
   const [from, setFrom] = useState(awal.from)
   const [to, setTo] = useState(awal.to)
   const [nota, setNota] = useState('')
@@ -28,12 +29,8 @@ export default function Keluar({ session, modeKey, onSelesai }) {
   const [hapusBusy, setHapusBusy] = useState(0)
 
   const { groups, produkMsg } = useProducts()
-  const { items, saveItem, deleteItem } = useMovements(from, to, session)
-
-  useEffect(() => {
-    supabase.from('racks').select('name').eq('active', true).order('sort')
-      .then(({ data }) => setRacks((data || []).map((r) => r.name)))
-  }, [])
+  const { items, pending, antrianMsg, saveItem, deleteItem, kirimAntrian } =
+    useMovements(from, to, session)
 
   // Daftar "sering diisi ulang": dihitung dari riwayat 30 hari, bukan daftar yang
   // harus dirawat manual. Minggu pertama memang kosong -- itu wajar, bukan galat,
@@ -60,6 +57,18 @@ export default function Keluar({ session, modeKey, onSelesai }) {
   const siap = siapLanjut(from, to)
   const rute = `${from} › ${to}`
 
+  // Baris antrian ikut ditampilkan bersama baris server, ditandai "menunggu sinyal".
+  // Kalau disembunyikan, petugas mengira barangnya belum tercatat lalu mengetiknya
+  // dua kali. Baris server yang produknya sedang diantre dibuang dari tampilan:
+  // angkanya sudah basi, yang benar yang di antrian.
+  const daftar = useMemo(() => {
+    const diantre = new Set(pending.map((p) => p.product_name))
+    return [
+      ...pending.map((p) => ({ ...p, menunggu: true })),
+      ...items.filter((i) => !diantre.has(i.product_name)),
+    ]
+  }, [pending, items])
+
   function pilihLokasi(sisi, nama) {
     setKirimOk('')
     if (sisi === 'from') {
@@ -71,7 +80,7 @@ export default function Keluar({ session, modeKey, onSelesai }) {
   }
 
   function bukaProduk(group) {
-    const adaItem = items.find((i) => i.product_name === group.name) || null
+    const adaItem = daftar.find((i) => i.product_name === group.name) || null
     setOpen({ group, item: adaItem })
     setQuery('')
   }
@@ -104,6 +113,15 @@ export default function Keluar({ session, modeKey, onSelesai }) {
     setKirimBusy(true)
     setKirimMsg('')
     setKirimOk('')
+    // Baris yang masih di antrian belum ada di DB, jadi `upload-mutasi` tidak akan
+    // melihatnya. Kirim antrian dulu; kalau masih ada sisa, pengiriman dibatalkan --
+    // lebih baik tertunda daripada surat jalan dilaporkan lengkap padahal kurang.
+    const { sisa } = await kirimAntrian()
+    if (sisa) {
+      setKirimMsg(`Masih ada ${sisa} barang menunggu sinyal — pengiriman ditunda supaya tidak ada yang tertinggal.`)
+      setKirimBusy(false)
+      return
+    }
     try {
       const { data, error } = await supabase.functions.invoke('upload-mutasi', { body: { from, to } })
       if (error) throw error
@@ -215,7 +233,7 @@ export default function Keluar({ session, modeKey, onSelesai }) {
         {query ? (
           hasil.length ? (
             <div style={{ marginTop: 8 }}>
-              {hasil.map((g) => <BarisProduk key={g.name} group={g} items={items} onKlik={bukaProduk} />)}
+              {hasil.map((g) => <BarisProduk key={g.name} group={g} items={daftar} onKlik={bukaProduk} />)}
             </div>
           ) : (
             <p className="muted" style={{ marginTop: 12 }}>Tidak ada produk yang cocok.</p>
@@ -223,7 +241,7 @@ export default function Keluar({ session, modeKey, onSelesai }) {
         ) : seringGroups.length ? (
           <>
             <p className="section-title" style={{ marginTop: 16 }}>Sering diisi ulang</p>
-            {seringGroups.map((g) => <BarisProduk key={g.name} group={g} items={items} onKlik={bukaProduk} />)}
+            {seringGroups.map((g) => <BarisProduk key={g.name} group={g} items={daftar} onKlik={bukaProduk} />)}
           </>
         ) : (
           <p className="muted" style={{ marginTop: 12 }}>Ketik nama produknya untuk mulai.</p>
@@ -234,17 +252,26 @@ export default function Keluar({ session, modeKey, onSelesai }) {
         <p className="section-title">
           Surat jalan
           <span className="spacer" />
-          <span className="badge green">{items.length} barang</span>
+          <span className="badge green">{daftar.length} barang</span>
         </p>
         <p className="muted" style={{ marginBottom: 12 }}>{rute}</p>
+        {pending.length > 0 && (
+          <p className="error">
+            ⏳ {pending.length} barang tersimpan di HP, belum sampai ke pusat. Aman —
+            terkirim sendiri begitu sinyal balik. Jangan hapus aplikasi dulu.
+          </p>
+        )}
+        {antrianMsg && <p className="error">{antrianMsg}</p>}
         {hapusMsg && <p className="error">{hapusMsg}</p>}
-        {items.length === 0 && <p className="muted">Belum ada barang. Pilih produk di atas, lalu isi jumlahnya.</p>}
-        {items.map((it) => (
+        {daftar.length === 0 && <p className="muted">Belum ada barang. Pilih produk di atas, lalu isi jumlahnya.</p>}
+        {daftar.map((it) => (
           <div key={it.id} className="entry" onClick={() => bukaDariItem(it)}>
             <span className="name">
               {it.product_name}
               <br />
-              <span className="muted">{rincianSingkat(it.units)}</span>
+              <span className="muted">
+                {it.menunggu ? '⏳ menunggu sinyal — tersimpan di HP' : rincianSingkat(it.units)}
+              </span>
             </span>
             <span className="entry-act">
               <span className="qty">{Number(it.qty_total)}</span>
@@ -265,8 +292,18 @@ export default function Keluar({ session, modeKey, onSelesai }) {
 
       <div className="actionbar">
         <div className="actionbar-in">
-          <button className="primary" disabled={!items.length || kirimBusy} onClick={kirim}>
-            {kirimBusy ? 'Mengirim…' : items.length ? `Kirim ${items.length} barang` : 'Belum ada barang'}
+          <button
+            className="primary"
+            disabled={!daftar.length || kirimBusy || tanpaSinyal}
+            onClick={kirim}
+          >
+            {tanpaSinyal
+              ? `📴 ${daftar.length} barang — kirim nanti kalau ada sinyal`
+              : kirimBusy
+                ? 'Mengirim…'
+                : daftar.length
+                  ? `Kirim ${daftar.length} barang`
+                  : 'Belum ada barang'}
           </button>
         </div>
       </div>

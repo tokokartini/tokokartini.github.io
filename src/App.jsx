@@ -172,15 +172,15 @@ export default function App() {
             : <Admin username={username} />
         )}
         {session && !isAdmin && !rack && !modeKey && (
-          <Home username={username} tanpaSinyal={tanpaSinyal} onStart={setRack} onKeluar={setModeKey} />
+          <Home username={username} onStart={setRack} onKeluar={setModeKey} />
         )}
         {session && !isAdmin && modeKey && (
-          // Surat jalan belum punya antrian offline -- tiap Simpan langsung menulis ke
-          // DB. Kalau dibiarkan jalan tanpa sinyal, karyawan mengetik satu surat jalan
-          // penuh lalu kehilangan semuanya. Lebih baik ditutup terang-terangan.
-          tanpaSinyal
-            ? <ButuhSinyal judul={`${MODES[modeKey].judul} butuh sinyal`} onKembali={() => setModeKey(null)} />
-            : <Keluar session={session} modeKey={modeKey} onSelesai={() => setModeKey(null)} />
+          <Keluar
+            session={session}
+            modeKey={modeKey}
+            tanpaSinyal={tanpaSinyal}
+            onSelesai={() => setModeKey(null)}
+          />
         )}
         {session && !isAdmin && rack && !modeKey && (
           <Count

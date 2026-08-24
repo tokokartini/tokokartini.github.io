@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
-import { supabase } from '../lib/supabase'
+import { useState } from 'react'
 import { MODES, MODE_KEYS } from '../lib/mutasi'
+import { useRacks } from '../lib/racks'
 
 // Halaman depan: pilih pekerjaan dulu, baru lokasinya.
 //
@@ -8,42 +8,11 @@ import { MODES, MODE_KEYS } from '../lib/mutasi'
 // satu-satunya pekerjaan. Sekarang ada tiga alur mutasi juga, dan isi ulang
 // display adalah yang dikerjakan tiap hari -- jadi dia yang paling menonjol,
 // sementara SO turun ke kelompok bulanan.
-// Daftar rak disimpan di HP. Tanpa ini, membuka aplikasi tanpa sinyal berhenti di
-// "Memuat daftar rak..." -- karyawan tidak bisa masuk ke halaman hitung sama sekali,
-// jadi antrian offline pun tidak ada gunanya. Rak jarang berubah (terakhir 2026-08-04)
-// dan tetap disegarkan tiap kali sinyal ada.
-const RAK_KEY = 'so-racks-v1'
-
-function bacaRakTersimpan() {
-  try {
-    const list = JSON.parse(localStorage.getItem(RAK_KEY) || 'null')
-    return Array.isArray(list) ? list.filter((r) => typeof r === 'string') : []
-  } catch {
-    return []
-  }
-}
-
-export default function Home({ tanpaSinyal, onStart, onKeluar }) {
-  const [racks, setRacks] = useState(bacaRakTersimpan)
+export default function Home({ onStart, onKeluar }) {
+  const racks = useRacks()
   const [rack, setRack] = useState(localStorage.getItem('so-rack') || '')
   const [pilihRak, setPilihRak] = useState(false)
-
-  useEffect(() => {
-    supabase
-      .from('racks')
-      .select('name')
-      .eq('active', true)
-      .order('sort')
-      .then(({ data, error }) => {
-        // Gagal ke server: pertahankan daftar tersimpan, jangan dikosongkan.
-        if (error || !data) return
-        const names = data.map((r) => r.name)
-        if (!names.length) return
-        setRacks(names)
-        try { localStorage.setItem(RAK_KEY, JSON.stringify(names)) } catch { /* kuota penuh: tidak fatal */ }
-        if (!names.includes(rack)) setRack(names[0])
-      })
-  }, [])
+  const terpilih = racks.includes(rack) ? rack : (racks[0] || '')
 
   if (pilihRak) {
     return (
@@ -55,8 +24,8 @@ export default function Home({ tanpaSinyal, onStart, onKeluar }) {
             <button
               type="button"
               key={r}
-              className={`rack-opt${r === rack ? ' on' : ''}`}
-              aria-pressed={r === rack}
+              className={`rack-opt${r === terpilih ? ' on' : ''}`}
+              aria-pressed={r === terpilih}
               onClick={() => setRack(r)}
             >
               <span className="dot" aria-hidden="true" />
@@ -66,8 +35,8 @@ export default function Home({ tanpaSinyal, onStart, onKeluar }) {
         </div>
         <button
           className="primary"
-          disabled={!rack}
-          onClick={() => { localStorage.setItem('so-rack', rack); onStart(rack) }}
+          disabled={!terpilih}
+          onClick={() => { localStorage.setItem('so-rack', terpilih); onStart(terpilih) }}
         >
           Mulai Hitung →
         </button>
@@ -81,11 +50,11 @@ export default function Home({ tanpaSinyal, onStart, onKeluar }) {
   return (
     <div className="card">
       <p className="section-title">Pekerjaan hari ini</p>
-      <MenuOpt modeKey="display" utama mati={tanpaSinyal} onKlik={onKeluar} />
+      <MenuOpt modeKey="display" utama onKlik={onKeluar} />
 
       <p className="menu-sep">Lebih jarang</p>
       {MODE_KEYS.filter((k) => k !== 'display').map((k) => (
-        <MenuOpt key={k} modeKey={k} mati={tanpaSinyal} onKlik={onKeluar} />
+        <MenuOpt key={k} modeKey={k} onKlik={onKeluar} />
       ))}
 
       <p className="menu-sep">Bulanan</p>
@@ -101,21 +70,14 @@ export default function Home({ tanpaSinyal, onStart, onKeluar }) {
   )
 }
 
-// `mati` = sedang tanpa sinyal. Surat jalan menulis langsung ke pusat (belum punya
-// antrian offline), jadi lebih baik kelihatan mati daripada menerima ketikan yang
-// nanti hilang.
-function MenuOpt({ modeKey, utama, mati, onKlik }) {
+function MenuOpt({ modeKey, utama, onKlik }) {
   const m = MODES[modeKey]
   return (
-    <button
-      className={`menu-opt${utama ? ' utama' : ''}`}
-      disabled={mati}
-      onClick={() => onKlik(modeKey)}
-    >
+    <button className={`menu-opt${utama ? ' utama' : ''}`} onClick={() => onKlik(modeKey)}>
       <span className="ico" aria-hidden="true">{m.ico}</span>
       <span>
         <span className="t">{m.judul}</span>
-        <span className="s">{mati ? 'Butuh sinyal' : m.sub}</span>
+        <span className="s">{m.sub}</span>
       </span>
       <span className="arw" aria-hidden="true">›</span>
     </button>
