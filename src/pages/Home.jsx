@@ -8,8 +8,23 @@ import { MODES, MODE_KEYS } from '../lib/mutasi'
 // satu-satunya pekerjaan. Sekarang ada tiga alur mutasi juga, dan isi ulang
 // display adalah yang dikerjakan tiap hari -- jadi dia yang paling menonjol,
 // sementara SO turun ke kelompok bulanan.
+// Daftar rak disimpan di HP. Tanpa ini, membuka aplikasi tanpa sinyal berhenti di
+// "Memuat daftar rak..." -- karyawan tidak bisa masuk ke halaman hitung sama sekali,
+// jadi antrian offline pun tidak ada gunanya. Rak jarang berubah (terakhir 2026-08-04)
+// dan tetap disegarkan tiap kali sinyal ada.
+const RAK_KEY = 'so-racks-v1'
+
+function bacaRakTersimpan() {
+  try {
+    const list = JSON.parse(localStorage.getItem(RAK_KEY) || 'null')
+    return Array.isArray(list) ? list.filter((r) => typeof r === 'string') : []
+  } catch {
+    return []
+  }
+}
+
 export default function Home({ onStart, onKeluar }) {
-  const [racks, setRacks] = useState([])
+  const [racks, setRacks] = useState(bacaRakTersimpan)
   const [rack, setRack] = useState(localStorage.getItem('so-rack') || '')
   const [pilihRak, setPilihRak] = useState(false)
 
@@ -19,10 +34,14 @@ export default function Home({ onStart, onKeluar }) {
       .select('name')
       .eq('active', true)
       .order('sort')
-      .then(({ data }) => {
-        const names = (data || []).map((r) => r.name)
+      .then(({ data, error }) => {
+        // Gagal ke server: pertahankan daftar tersimpan, jangan dikosongkan.
+        if (error || !data) return
+        const names = data.map((r) => r.name)
+        if (!names.length) return
         setRacks(names)
-        if (names.length && !names.includes(rack)) setRack(names[0])
+        try { localStorage.setItem(RAK_KEY, JSON.stringify(names)) } catch { /* kuota penuh: tidak fatal */ }
+        if (!names.includes(rack)) setRack(names[0])
       })
   }, [])
 
@@ -30,7 +49,7 @@ export default function Home({ onStart, onKeluar }) {
     return (
       <div className="card">
         <p className="section-title">Rak yang dihitung</p>
-        {!racks.length && <p className="muted">Memuat daftar rak…</p>}
+        {!racks.length && <p className="muted">Memuat daftar rak… (butuh sinyal sekali di awal)</p>}
         <div className="rack-list">
           {racks.map((r) => (
             <button
