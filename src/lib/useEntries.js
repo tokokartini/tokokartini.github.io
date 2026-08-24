@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { supabase } from './supabase'
 import { totalQty } from './convert'
 import { ownEntriesQuery, othersOpenEntriesQuery } from './entryQueries'
+import { bacaEntriCache, tulisEntriCache } from './entryCache'
 import {
   adalahLokal,
   antre,
@@ -20,6 +21,13 @@ export function useEntries(rack, session) {
   const [antrianMsg, setAntrianMsg] = useState('')
   const uid = session.user.id
   const username = session.user.email.split('@')[0]
+  // Sesi lokal = aplikasi dibuka tanpa sinyal dengan token yang sudah kedaluwarsa
+  // (lihat `sesiLokal.js`). Tidak ada token sah, jadi SETIAP panggilan ke Supabase
+  // pasti ditolak. Menghubunginya bukan cuma sia-sia -- penolakan auth datang dengan
+  // `code`, yang oleh `gagalJaringan()` dianggap "server menolak" dan bikin hitungan
+  // dilaporkan gagal alih-alih diantre. Jadi di mode ini jaringan tidak disentuh
+  // sama sekali: baca dari cache, tulis ke antrian.
+  const tanpaSinyal = !!session.lokal
 
   const muatPending = useCallback(() => {
     const list = outboxRak(bacaOutbox(), rack, uid)
@@ -28,15 +36,31 @@ export function useEntries(rack, session) {
   }, [rack, uid])
 
   const refresh = useCallback(async () => {
+    if (tanpaSinyal) {
+      const { milik, lain } = bacaEntriCache(rack, uid)
+      setOthersOpen(lain)
+      setEntries(milik)
+      return milik
+    }
     const [{ data, error }, { data: others, error: othersErr }] = await Promise.all([
       ownEntriesQuery(supabase, rack, uid),
       othersOpenEntriesQuery(supabase, rack, uid),
     ])
-    setOthersOpen(othersErr ? [] : (others || []))
-    if (error) return null
-    setEntries(data || [])
-    return data || []
-  }, [rack, uid])
+    const lain = othersErr ? [] : (others || [])
+    setOthersOpen(lain)
+    if (error) {
+      // Server tak terjangkau padahal sesi masih sah (sinyal baru saja putus).
+      // Jangan kosongkan daftar -- pakai salinan terakhir, supaya karyawan tidak
+      // mengira hitungannya lenyap.
+      const { milik } = bacaEntriCache(rack, uid)
+      if (milik.length) setEntries(milik)
+      return null
+    }
+    const milik = data || []
+    setEntries(milik)
+    tulisEntriCache(rack, uid, { milik, lain })
+    return milik
+  }, [rack, uid, tanpaSinyal])
 
   // Kirim satu baris antrian ke server.
   //
@@ -108,6 +132,12 @@ export function useEntries(rack, session) {
   // aplikasi dibuka di rak berbeda) tidak akan pernah terkirim kalau disaring
   // per rak. Tiap baris sudah membawa raknya sendiri, jadi aman.
   const kirimAntrian = useCallback(async () => {
+    if (tanpaSinyal) {
+      // Belum ada token sah -- percobaan kirim pasti ditolak dan tiap baris bakal
+      // dibuang sebagai "ditolak pusat". Diamkan saja sampai sesi asli pulih.
+      const sisa = outboxRak(bacaOutbox(), rack, uid).length
+      return { sisa, terkirim: 0, catatan: [] }
+    }
     const antrian = bacaOutbox().filter((it) => it.user_id === uid)
     if (!antrian.length) {
       setAntrianMsg('')
@@ -142,7 +172,7 @@ export function useEntries(rack, session) {
     setAntrianMsg(catatan.join(' · '))
     if (terkirim) await refresh()
     return { sisa, terkirim, catatan }
-  }, [rack, uid, kirimSatu, muatPending, refresh])
+  }, [rack, uid, tanpaSinyal, kirimSatu, muatPending, refresh])
 
   useEffect(() => { refresh() }, [refresh])
 
@@ -172,6 +202,16 @@ export function useEntries(rack, session) {
       expired_date: expired || null,
       username,
       updated_at: new Date().toISOString(),
+    }
+
+    if (tanpaSinyal) {
+      const { tersimpan } = antre(item)
+      muatPending()
+      if (!tersimpan) {
+        throw new Error('Simpanan HP penuh — hitungan TIDAK tersimpan. Catat di kertas dulu.')
+      }
+      setAntrianMsg('')
+      return { antre: true }
     }
 
     let hasil
@@ -220,10 +260,23 @@ export function useEntries(rack, session) {
     // perlu ikut diantre.
     if (adalahLokal(id)) {
       const item = pending.find((p) => p.id === id)
+      if (tanpaSinyal && item?.server_id) {
+        // Baris antrian ini menimpa entri yang SUDAH ada di server. Membuangnya
+        // sekarang cuma menghapus perubahan offline-nya -- entri aslinya tetap hidup
+        // di pusat dan tetap ikut ter-upload, padahal karyawan sudah yakin barisnya
+        // hilang. Jangan sentuh apa pun sampai bisa dihapus utuh.
+        throw new Error('Belum ada sinyal — entri lama baru bisa dihapus setelah tersambung')
+      }
       buangOutbox(id)
       muatPending()
       if (!item?.server_id) return
       id = item.server_id
+    }
+    if (tanpaSinyal) {
+      // Entri ini sudah ada di server dan cuma server yang bisa membuangnya. Menandai
+      // "terhapus" di HP berbahaya: dia tetap ikut ter-upload nanti, sementara
+      // karyawan sudah yakin barisnya hilang.
+      throw new Error('Belum ada sinyal — entri lama baru bisa dihapus setelah tersambung')
     }
     const { data, error } = await supabase
       .from('count_entries')

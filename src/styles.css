@@ -87,6 +87,19 @@ body {
   align-items: center;
   gap: 12px;
 }
+/* Pita mode tanpa sinyal. Nempel di app bar, bukan di badan halaman: karyawan harus
+   tahu statusnya walau sedang scroll jauh di daftar produk. Warnanya oranye, bukan
+   merah -- ini keadaan yang aman dan sudah diantisipasi, bukan galat. */
+.offline-bar {
+  background: var(--orange);
+  color: #1c1917;
+  font-size: 0.8rem;
+  font-weight: 600;
+  line-height: 1.4;
+  padding: 8px 16px;
+  text-align: center;
+}
+
 .brand { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
 .brand-mark {
   width: 38px; height: 38px; flex: none;
@@ -420,6 +433,8 @@ button.hapus:active:not(:disabled) { background: var(--error-bg); }
   margin-bottom: 8px;
 }
 .menu-opt:active { background: var(--border); }
+.menu-opt:disabled { opacity: 0.5; }
+.menu-opt:disabled:active { background: var(--bg-2); }
 .menu-opt .ico {
   width: 40px; height: 40px; flex: none;
   display: grid; place-items: center;

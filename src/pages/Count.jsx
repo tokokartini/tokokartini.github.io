@@ -5,7 +5,7 @@ import { useEntries } from '../lib/useEntries'
 import { useProducts } from '../lib/useProducts'
 import CountForm from '../components/CountForm'
 
-export default function Count({ session, rack, onChangeRack }) {
+export default function Count({ session, rack, tanpaSinyal, onChangeRack }) {
   const { groups, produkMsg } = useProducts()
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(null) // { group, entry|null }
@@ -129,6 +129,12 @@ export default function Count({ session, rack, onChangeRack }) {
             terkirim sendiri begitu sinyal balik. Jangan hapus aplikasi dulu.
           </p>
         )}
+        {tanpaSinyal && (
+          <p className="muted">
+            Daftar di bawah dibaca dari simpanan HP, jadi hitungan rekan yang masuk
+            barusan belum tentu kelihatan.
+          </p>
+        )}
         {antrianMsg && <p className="error">{antrianMsg}</p>}
         <div className="search">
           <span className="search-ico" aria-hidden="true">🔍</span>
@@ -210,12 +216,18 @@ export default function Count({ session, rack, onChangeRack }) {
           perlu di-scroll dan jumlah entri selalu kelihatan. */}
       <div className="actionbar">
         <div className="actionbar-in">
-          <button className="primary" disabled={uploading || !daftar.length} onClick={upload}>
-            {uploading
-              ? 'Mengirim…'
-              : daftar.length
-                ? `⬆️ Upload ${daftar.length} entri`
-                : '⬆️ Upload'}
+          <button
+            className="primary"
+            disabled={uploading || tanpaSinyal || !daftar.length}
+            onClick={upload}
+          >
+            {tanpaSinyal
+              ? `📴 ${daftar.length} entri — upload nanti kalau ada sinyal`
+              : uploading
+                ? 'Mengirim…'
+                : daftar.length
+                  ? `⬆️ Upload ${daftar.length} entri`
+                  : '⬆️ Upload'}
           </button>
         </div>
       </div>

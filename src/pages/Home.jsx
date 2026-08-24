@@ -23,7 +23,7 @@ function bacaRakTersimpan() {
   }
 }
 
-export default function Home({ onStart, onKeluar }) {
+export default function Home({ tanpaSinyal, onStart, onKeluar }) {
   const [racks, setRacks] = useState(bacaRakTersimpan)
   const [rack, setRack] = useState(localStorage.getItem('so-rack') || '')
   const [pilihRak, setPilihRak] = useState(false)
@@ -81,11 +81,11 @@ export default function Home({ onStart, onKeluar }) {
   return (
     <div className="card">
       <p className="section-title">Pekerjaan hari ini</p>
-      <MenuOpt modeKey="display" utama onKlik={onKeluar} />
+      <MenuOpt modeKey="display" utama mati={tanpaSinyal} onKlik={onKeluar} />
 
       <p className="menu-sep">Lebih jarang</p>
       {MODE_KEYS.filter((k) => k !== 'display').map((k) => (
-        <MenuOpt key={k} modeKey={k} onKlik={onKeluar} />
+        <MenuOpt key={k} modeKey={k} mati={tanpaSinyal} onKlik={onKeluar} />
       ))}
 
       <p className="menu-sep">Bulanan</p>
@@ -101,14 +101,21 @@ export default function Home({ onStart, onKeluar }) {
   )
 }
 
-function MenuOpt({ modeKey, utama, onKlik }) {
+// `mati` = sedang tanpa sinyal. Surat jalan menulis langsung ke pusat (belum punya
+// antrian offline), jadi lebih baik kelihatan mati daripada menerima ketikan yang
+// nanti hilang.
+function MenuOpt({ modeKey, utama, mati, onKlik }) {
   const m = MODES[modeKey]
   return (
-    <button className={`menu-opt${utama ? ' utama' : ''}`} onClick={() => onKlik(modeKey)}>
+    <button
+      className={`menu-opt${utama ? ' utama' : ''}`}
+      disabled={mati}
+      onClick={() => onKlik(modeKey)}
+    >
       <span className="ico" aria-hidden="true">{m.ico}</span>
       <span>
         <span className="t">{m.judul}</span>
-        <span className="s">{m.sub}</span>
+        <span className="s">{mati ? 'Butuh sinyal' : m.sub}</span>
       </span>
       <span className="arw" aria-hidden="true">›</span>
     </button>
