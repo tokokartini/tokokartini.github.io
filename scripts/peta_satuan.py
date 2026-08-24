@@ -54,6 +54,7 @@ SINONIM_SATUAN = {
     "btl": "botol",
     "bks": "bungkus",
     "pc": "pcs", "piece": "pcs",
+    "lbr": "pcs", "lembar": "pcs", "sheet": "pcs",
     "pak": "pack",
 }
 
@@ -368,6 +369,16 @@ def uji():
     # Master punya dua `Pack` beda isi -> ukuran yang tidak cocok tetap ambigu.
     amb2 = b3[("Kresek Dua", "Pack (75 Pcs)")]
     assert amb2[4] == "" and amb2[5] == ISI_MANUAL, f"pack ambigu TIDAK boleh ditebak: {amb2}"
+
+    # Kertas: master menulis `lbr`, Olsera menulis `Pcs`. Isi kurungnya sama angka.
+    produk4 = [
+        {"sku": "N-1", "product_name": "Kertas Nasi", "variant": "Pcs", "mult": 1},
+        {"sku": "N-P", "product_name": "Kertas Nasi", "variant": "Pack (250lbr)", "mult": 250},
+    ]
+    b4 = {(b[0], b[1]): b for b in
+          susun_peta([{"product": "Kertas Nasi", "variant": "Pack (250 Pcs)", "omzet": 10}], produk4)[0]}
+    kertas = b4[("Kertas Nasi", "Pack (250 Pcs)")]
+    assert kertas[4] == 250 and kertas[5].startswith(SETARA), f"lbr=pcs gagal: {kertas}"
 
     print("semua uji susun_peta LOLOS")
 
