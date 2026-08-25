@@ -68,25 +68,39 @@ BARIS = [
 
     ("#", "MUTASI BARANG"),
     ("Baris mutasi seluruhnya", '=COUNTA(Mutasi!A2:A)'),
+    # SUMPRODUCT, BUKAN COUNTIFS. Kolom waktu di tab Mutasi itu TEKS
+    # ("2026-08-25 15:00:02"), dan COUNTIFS dengan syarat ">=tanggal" menganggapnya
+    # angka sehingga tidak pernah cocok -- hasilnya diam-diam 0, tanpa error.
+    # Perbandingan teks di dalam SUMPRODUCT jalan, dan bentuk YYYY-MM-DD urutan
+    # hurufnya sama dengan urutan tanggalnya.
     ("7 hari terakhir",
-     '=IFERROR(COUNTIFS(Mutasi!A2:A;">="&TEXT(TODAY()-7;"yyyy-mm-dd");Mutasi!A2:A;"<>");0)'),
+     '=IFERROR(SUMPRODUCT((Mutasi!A2:A<>"")*'
+     '(LEFT(Mutasi!A2:A;10)>=TEXT(TODAY()-7;"yyyy-mm-dd")));0)'),
     ("Isi ulang display 7 hari terakhir",
-     '=IFERROR(COUNTIFS(Mutasi!E2:E;"Area Display";'
-     'Mutasi!A2:A;">="&TEXT(TODAY()-7;"yyyy-mm-dd"));0)'),
+     '=IFERROR(SUMPRODUCT((Mutasi!E2:E="Area Display")*'
+     '(LEFT(Mutasi!A2:A;10)>=TEXT(TODAY()-7;"yyyy-mm-dd")));0)'),
     None,
 
     # Bagian ini SELALU ditaruh paling bawah. Menyisipkan di tengah menggeser nomor
     # baris yang dipakai formula '=B8+B9' dan daftar RUPIAH di bawah.
     ("#", "KERUGIAN BARANG"),
+    # Alasan sama: kolom Tanggal di tab Barang Rusak juga teks. Cocokkan awalan
+    # "2026-08*" pakai wildcard, itu perbandingan teks yang memang jalan.
     ("Barang rusak bulan ini",
-     '=IFERROR(COUNTIFS(\'Barang Rusak\'!A2:A;">="&TEXT(EOMONTH(TODAY();-1)+1;"yyyy-mm-dd"));0)'),
+     '=IFERROR(COUNTIF(\'Barang Rusak\'!A2:A;TEXT(TODAY();"yyyy-mm")&"*");0)'),
     ("Nilai kerugian bulan ini",
-     '=IFERROR(SUMIFS(\'Barang Rusak\'!I2:I;\'Barang Rusak\'!A2:A;'
-     '">="&TEXT(EOMONTH(TODAY();-1)+1;"yyyy-mm-dd"));0)'),
+     '=IFERROR(SUMIF(\'Barang Rusak\'!A2:A;TEXT(TODAY();"yyyy-mm")&"*";'
+     '\'Barang Rusak\'!I2:I);0)'),
     ("Nilai kerugian seluruhnya", '=IFERROR(SUM(\'Barang Rusak\'!I2:I);0)'),
-    ("Sebab terbanyak bulan ini",
-     '=IFERROR(INDEX(SORT(QUERY(\'Barang Rusak\'!A2:I;'
-     '"select B, sum(I) where B <> \'\' group by B";0);2;FALSE);1;1);"belum ada")'),
+    None,
+
+    # Ditambahkan paling bawah, alasan sama seperti bagian KERUGIAN di atas.
+    ("#", "SELISIH SO"),
+    # COUNT (bukan COUNTA) supaya baris penanda "(semua cocok)" tidak ikut terhitung.
+    ("Produk yang selisih", '=IFERROR(COUNT(\'Selisih SO\'!H2:H);0)'),
+    ("Nilai barang kurang", '=IFERROR(-SUMIF(\'Selisih SO\'!J2:J;"<0");0)'),
+    ("Nilai barang lebih", '=IFERROR(SUMIF(\'Selisih SO\'!J2:J;">0");0)'),
+    ("Selisih dihitung", '=IFERROR(\'Selisih SO\'!M1;"belum pernah dihitung")'),
 ]
 
 # Blok tabel di sebelah kanan.
@@ -109,8 +123,9 @@ BLOK = [
 
 # Baris yang isinya rupiah, bukan hitungan. Nomornya mengikuti urutan BARIS di atas:
 # B8 Gudang, B9 Display, B10 Jumlah, B17 nilai display minus, B23 nilai yang lewat
-# ED, B34 kerugian bulan ini, B35 kerugian seluruhnya.
-RUPIAH = ["B8", "B9", "B10", "B17", "B23", "B34", "B35"]
+# ED, B34 kerugian bulan ini, B35 kerugian seluruhnya, B39 barang kurang,
+# B40 barang lebih.
+RUPIAH = ["B8", "B9", "B10", "B17", "B23", "B34", "B35", "B39", "B40"]
 
 
 # --- Jaringan ---------------------------------------------------------------

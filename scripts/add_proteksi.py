@@ -42,6 +42,7 @@ LINDUNGI = [
     ("Stok Gudang", "A1:M1", "judul; isinya ditulis scripts/hitung_saldo.py"),
     ("Stok Display", "A1:O1", "judul; isinya ditulis scripts/saldo_display.py"),
     ("Arsip Saldo", "A1:H1", "judul; isinya potret harian dari dua skrip saldo"),
+    ("Selisih SO", "A1:K1", "judul; isinya ditulis scripts/selisih_so.py"),
     ("Log", "A1:I1", "baris judul saja — badan Log harus tetap bisa ditulis upload-rak"),
     ("Mutasi", "A1:L1", "baris judul saja — badan Mutasi ditulis upload-mutasi"),
 ]
