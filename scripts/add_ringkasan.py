@@ -171,6 +171,10 @@ def pasang(ws):
     tebal += [s for s, _, _ in BLOK]
     for sel in tebal:
         ws.format(sel, {"textFormat": {"bold": True}})
+    # Kolom B dinolkan formatnya dulu. `clear()` cuma menghapus ISI, bukan format --
+    # jadi kalau susunan barisnya bergeser, format rupiah dari susunan lama nyangkut
+    # di baris yang sekarang berisi hitungan, dan "3 produk" tampil sebagai "Rp 3".
+    ws.format("B1:B60", {"numberFormat": {"type": "NUMBER", "pattern": "#,##0"}})
     for sel in RUPIAH:
         ws.format(sel, {"numberFormat": {"type": "NUMBER", "pattern": '"Rp" #,##0'}})
     ws.columns_auto_resize(0, 1)
