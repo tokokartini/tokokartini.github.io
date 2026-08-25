@@ -275,7 +275,9 @@ export default function Count({ session, rack, tanpaSinyal, onChangeRack }) {
             <span>Sudah terkirim ke pusat</span>
             <span className="spacer" />
             <span className="badge green">{terkirim.length}</span>
-            <span className="arw" aria-hidden="true">{lihatTerkirim ? '⌄' : '›'}</span>
+            {/* Segitiga (U+25BE/U+25B8) dipilih karena ada di hampir semua font Android;
+                U+2304 yang dipakai sebelumnya tidak, dan tampil kosong. */}
+            <span className="arw" aria-hidden="true">{lihatTerkirim ? '▾' : '▸'}</span>
           </button>
           {lihatTerkirim && (
             <>

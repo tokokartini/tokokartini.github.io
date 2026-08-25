@@ -60,7 +60,10 @@ export const MODES = {
     key: 'gudang',
     jenis: 'Pindah',
     judul: 'Pindah Antar Gudang',
-    ico: '⇄',
+    // Emoji, bukan simbol panah dua arah seperti U+21C4: simbol biasa cuma ada di
+    // sebagian font sistem dan tampil kosong di HP yang tidak punya fontnya,
+    // sementara emoji selalu punya font sendiri.
+    ico: '🔀',
     sub: 'Geser stok antar gudang',
     kunci: null,
     tetap: '',

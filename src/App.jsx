@@ -153,7 +153,15 @@ export default function App() {
           </div>
           {session && (
             <button className="icon-btn" aria-label="Keluar" title="Keluar" onClick={keluar}>
-              ⏻
+              {/* SVG, bukan karakter ⏻ (U+23FB): simbol itu bukan emoji, jadi cuma ada
+                  di sebagian font sistem dan di HP yang tidak punya fontnya tombolnya
+                  tampil kosong. Emoji di tempat lain aman karena ada font emoji
+                  terpisah; simbol biasa tidak. */}
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"
+                   strokeLinecap="round" aria-hidden="true">
+                <path d="M12 3v9" />
+                <path d="M6.3 6.3a8 8 0 1 0 11.4 0" />
+              </svg>
             </button>
           )}
         </div>
