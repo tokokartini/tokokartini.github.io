@@ -17,6 +17,8 @@ Rekap/Template Olsera/Arsip Harian tidak disentuh -- ketiganya agregat per SKU d
 atas Log, jadi ikut berubah sendiri. Rekap!G1 juga tidak disentuh.
 """
 import json
+import os
+import socket
 import sys
 import time
 import warnings
@@ -28,7 +30,21 @@ from google.oauth2.service_account import Credentials
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
 
-KEY_PATH = r"C:\Users\COMPUTER\Documents\Claude AI\claude-code-powershel-1427d99324cd.json"
+# IPv6 ke Google menggantung di jaringan toko (SYN-SENT ke 2001:4860:... tak pernah
+# berbalas), jadi skrip diam bermenit-menit tanpa output. Paksa IPv4.
+_getaddrinfo_asli = socket.getaddrinfo
+
+
+def _ipv4_saja(host, port, family=0, type=0, proto=0, flags=0):
+    return _getaddrinfo_asli(host, port, socket.AF_INET, type, proto, flags)
+
+
+socket.getaddrinfo = _ipv4_saja
+
+# Bisa ditimpa lewat env SO_KEY_PATH supaya skrip yang sama bisa jalan di
+# GitHub Actions, di mana kunci ditulis ke berkas sementara.
+KEY_PATH = os.environ.get(
+    "SO_KEY_PATH", str(Path.home() / "Documents/Claude AI/claude-code-powershel-1427d99324cd.json"))
 SHEET_ID = "1uP2ntR00nrstLXKTuCYw1IzWDKohQAKsaq3qeeApDgw"
 TAB = "Log"
 COLS = 8  # Waktu, Staff, rack, Produk, Satuan, SKU, Qty, ED

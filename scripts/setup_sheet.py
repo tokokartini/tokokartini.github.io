@@ -25,6 +25,7 @@ Stok, Mutasi, dan Cari Barang.
 """
 import json
 import os
+import socket
 import time
 import warnings
 from pathlib import Path
@@ -33,6 +34,17 @@ import gspread
 from google.oauth2.service_account import Credentials
 
 warnings.filterwarnings("ignore", category=DeprecationWarning)
+
+# IPv6 ke Google menggantung di jaringan toko (SYN-SENT ke 2001:4860:... tak pernah
+# berbalas), jadi skrip diam bermenit-menit tanpa output. Paksa IPv4.
+_getaddrinfo_asli = socket.getaddrinfo
+
+
+def _ipv4_saja(host, port, family=0, type=0, proto=0, flags=0):
+    return _getaddrinfo_asli(host, port, socket.AF_INET, type, proto, flags)
+
+
+socket.getaddrinfo = _ipv4_saja
 
 KEY_PATH = os.environ.get(
     "SO_KEY_PATH", str(Path.home() / "Documents/Claude AI/claude-code-powershel-1427d99324cd.json"))

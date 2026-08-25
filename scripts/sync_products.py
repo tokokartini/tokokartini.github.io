@@ -5,6 +5,8 @@ Pakai: python sync_products.py
 Butuh: scripts/config.local.json {"supabase_url": ..., "service_role_key": ...}
 """
 import json
+import os
+import socket
 import sys
 import time
 from pathlib import Path
@@ -14,7 +16,21 @@ UNIT_SLOTS = [(28, 6, None), (29, 8, 7), (30, 10, 9), (31, 12, 11)]
 
 SHEET_ID = "1BL34AALlM8tmJn7_z2L_RgTZVGEb4JsUVsnFVDzMyVM"
 TAB = "Master Pricelist New"
-KEY_PATH = r"C:\Users\COMPUTER\Documents\Claude AI\claude-code-powershel-1427d99324cd.json"
+# IPv6 ke Google menggantung di jaringan toko (SYN-SENT ke 2001:4860:... tak pernah
+# berbalas), jadi skrip diam bermenit-menit tanpa output. Paksa IPv4.
+_getaddrinfo_asli = socket.getaddrinfo
+
+
+def _ipv4_saja(host, port, family=0, type=0, proto=0, flags=0):
+    return _getaddrinfo_asli(host, port, socket.AF_INET, type, proto, flags)
+
+
+socket.getaddrinfo = _ipv4_saja
+
+# Bisa ditimpa lewat env SO_KEY_PATH supaya skrip yang sama bisa jalan di
+# GitHub Actions, di mana kunci ditulis ke berkas sementara.
+KEY_PATH = os.environ.get(
+    "SO_KEY_PATH", str(Path.home() / "Documents/Claude AI/claude-code-powershel-1427d99324cd.json"))
 
 
 def parse_isi(raw):
