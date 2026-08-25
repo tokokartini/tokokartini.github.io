@@ -33,6 +33,7 @@ LINDUNGI = [
     ("Ringkasan", "A1:P60", "seluruhnya formula yang membaca tab lain"),
     ("Cari Barang", "A2:L60", "formula pencarian — kotak cari B1 sengaja dibiarkan bebas"),
     ("Stok", "A1:M2", "baris penanda + judul; isinya ditulis scripts/hitung_stok.py"),
+    ("Stok per Gudang", "A1:P4000", "seluruhnya formula pivot di atas tab Stok"),
     ("Selisih SO", "A1:K2", "baris penanda + judul; isinya ditulis scripts/selisih_so.py"),
     ("Barang Rusak", "A1:N5000", "hasil QUERY dari Mutasi + kolom nilai"),
     ("Kadaluarsa", "A1:K5000", "hasil QUERY dari Log + kolom bantu"),

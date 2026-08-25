@@ -4,22 +4,23 @@ Sheet id `1uP2ntR00nrstLXKTuCYw1IzWDKohQAKsaq3qeeApDgw`, milik Sopian, dishare k
 service account `point-coffee@claude-code-powershel.iam.gserviceaccount.com`.
 Locale `in_ID`, jadi formula pakai `;` dan `\`. Zona Asia/Jakarta.
 
-**11 tab**, diurutkan menurut cara pakai — yang paling sering dibuka di depan,
+**12 tab**, diurutkan menurut cara pakai — yang paling sering dibuka di depan,
 sumber data di belakang supaya tidak kesenggol.
 
 | # | Tab | Diisi oleh | Isinya |
 |---|---|---|---|
 | 1 | **Ringkasan** | formula | keadaan hari ini: nilai stok, selisih, ED, kerugian, progres SO per lokasi |
 | 2 | **Cari Barang** | formula | ketik nama/SKU di `B1` → stok tiap lokasi, harga, ED, mutasi, selisih |
-| 3 | **Stok** | `hitung_stok.py` | sisa semua lokasi, gudang dan Area Display jadi satu tabel |
-| 4 | **Selisih SO** | `selisih_so.py` | perkiraan lawan hitungan fisik tiap SO |
-| 5 | **Barang Rusak** | formula | yang hangus + nilainya, dikelompokkan per sebab |
-| 6 | **Kadaluarsa** | formula | barang mendekati ED, terdekat di atas |
-| 7 | **Arsip Harian** | formula | hasil akhir SO per tanggal + SKU, satuan terkecil |
-| 8 | **Log** | Edge Function `upload-rak` | sumber: hasil SO mentah |
-| 9 | **Mutasi** | Edge Function `upload-mutasi` | sumber: barang datang / isi ulang / pindah / rusak |
-| 10 | **Harga** | `harga_master.py` | HPP + harga jual per SKU dari Master Pricelist |
-| 11 | **Penjualan** | `import_penjualan.py` | penjualan POS per periode; baris ber-`Sebab` = gagal dikonversi |
+| 3 | **Stok per Gudang** | formula | tabel silang: barang jadi baris, gudang jadi kolom, plus blok total |
+| 4 | **Stok** | `hitung_stok.py` | sisa semua lokasi, gudang dan Area Display jadi satu tabel (bentuk memanjang) |
+| 5 | **Selisih SO** | `selisih_so.py` | perkiraan lawan hitungan fisik tiap SO |
+| 6 | **Barang Rusak** | formula | yang hangus + nilainya, dikelompokkan per sebab |
+| 7 | **Kadaluarsa** | formula | barang mendekati ED, terdekat di atas |
+| 8 | **Arsip Harian** | formula | hasil akhir SO per tanggal + SKU, satuan terkecil |
+| 9 | **Log** | Edge Function `upload-rak` | sumber: hasil SO mentah |
+| 10 | **Mutasi** | Edge Function `upload-mutasi` | sumber: barang datang / isi ulang / pindah / rusak |
+| 11 | **Harga** | `harga_master.py` | HPP + harga jual per SKU dari Master Pricelist |
+| 12 | **Penjualan** | `import_penjualan.py` | penjualan POS per periode; baris ber-`Sebab` = gagal dikonversi |
 
 Log dan Mutasi adalah satu-satunya sumber. **Jangan pernah menulis ke Log dengan
 skrip** kecuali terpaksa: upload yang mendarat di tengah baca-tulis pernah hilang
@@ -27,7 +28,7 @@ permanen (7 entri, 2026-07-30).
 
 ## Yang jalan sendiri vs yang harus dijalankan
 
-Tab formula (1, 2, 5, 6, 7) selalu terbarui begitu ada upload. Tab skrip (3, 4)
+Tab formula (1, 2, 3, 6, 7, 8) selalu terbarui begitu ada upload. Tab skrip (4, 5)
 tidak — dan itu bahaya diam-diam, jadi **baris 1 masing-masing berbunyi sendiri**:
 
 ```
@@ -66,6 +67,7 @@ python3 -u add_mutasi.py         # baris judul tab Mutasi
 python3 -u add_kadaluarsa.py     # tab Kadaluarsa
 python3 -u add_barang_rusak.py   # tab Barang Rusak
 python3 -u add_cari_barang.py    # tab Cari Barang   (--uji mencoba cari barang sungguhan)
+python3 -u add_stok_gudang.py    # tab Stok per Gudang (--uji cocokkan dengan tab Stok)
 python3 -u add_ringkasan.py      # tab Ringkasan     (--uji memeriksa angkanya)
 python3 -u add_proteksi.py       # peringatan di rentang formula
 ```
