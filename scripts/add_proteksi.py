@@ -37,12 +37,13 @@ LINDUNGI = [
     ("Rekap Mutasi", "A1:H5000", "hasil QUERY dari Mutasi"),
     ("Kadaluarsa", "A1:K5000", "hasil QUERY dari Log + kolom bantu"),
     ("Ringkasan", "A1:P60", "seluruhnya formula yang membaca tab lain"),
+    ("Barang Rusak", "A1:N5000", "hasil QUERY dari Mutasi + kolom nilai"),
     ("Harga", "A1:H1", "judul; isinya ditulis scripts/harga_master.py"),
     ("Stok Gudang", "A1:M1", "judul; isinya ditulis scripts/hitung_saldo.py"),
     ("Stok Display", "A1:O1", "judul; isinya ditulis scripts/saldo_display.py"),
     ("Arsip Saldo", "A1:H1", "judul; isinya potret harian dari dua skrip saldo"),
     ("Log", "A1:I1", "baris judul saja — badan Log harus tetap bisa ditulis upload-rak"),
-    ("Mutasi", "A1:K1", "baris judul saja — badan Mutasi ditulis upload-mutasi"),
+    ("Mutasi", "A1:L1", "baris judul saja — badan Mutasi ditulis upload-mutasi"),
 ]
 
 # Bisa ditimpa lewat env SO_KEY_PATH supaya skrip yang sama bisa jalan di

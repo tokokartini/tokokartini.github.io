@@ -10,6 +10,7 @@ const GULA = {
   from_loc: 'Gudang Bahan Kue',
   to_loc: 'Area Display',
   nota: '',
+  sebab: '',
   product_name: 'Gula Pasir Gulaku 1kg',
   units: [
     { sku: 'GLK-KRT', variant: 'Krtn (20 Pack)', mult: 20, qty: 1 },
@@ -76,7 +77,7 @@ describe('rincianText', () => {
 })
 
 describe('buildMutasiRows', () => {
-  it('11 kolom, urutan Waktu Staff Jenis Dari Ke Produk Rincian Qty Satuan SKU Nota', () => {
+  it('12 kolom, urutan Waktu Staff Jenis Dari Ke Produk Rincian Qty Satuan SKU Nota Sebab', () => {
     const { rows } = buildMutasiRows([GULA])
     expect(rows).toHaveLength(1)
     expect(rows[0]).toEqual([
@@ -90,6 +91,7 @@ describe('buildMutasiRows', () => {
       25,
       'Pack',
       'GLK-PCK',
+      '',
       '',
     ])
   })
@@ -110,6 +112,29 @@ describe('buildMutasiRows', () => {
   it('nota null jadi teks kosong, bukan "null"', () => {
     const { rows } = buildMutasiRows([{ ...GULA, nota: null }])
     expect(rows[0][10]).toBe('')
+  })
+
+  it('barang rusak membawa sebab di kolom terakhir', () => {
+    const rusak = {
+      ...GULA,
+      jenis: 'Rusak',
+      from_loc: 'Gudang Bahan Kue',
+      to_loc: 'Barang Rusak',
+      sebab: 'Kadaluarsa',
+    }
+    const { rows } = buildMutasiRows([rusak])
+    expect(rows[0]).toHaveLength(12)
+    expect(rows[0][2]).toBe('Rusak')
+    expect(rows[0][4]).toBe('Barang Rusak')
+    expect(rows[0][11]).toBe('Kadaluarsa')
+  })
+
+  it('sebab null jadi teks kosong, dan tetap ada kolomnya', () => {
+    // Baris lama dari sebelum kolom sebab ada tetap harus menghasilkan 12 kolom,
+    // kalau tidak append-nya bergeser dan Nota jatuh ke kolom Sebab.
+    const { rows } = buildMutasiRows([{ ...GULA, sebab: null }])
+    expect(rows[0]).toHaveLength(12)
+    expect(rows[0][11]).toBe('')
   })
 
   it('baris tanpa satuan dilewati, sisanya tetap masuk', () => {

@@ -15,6 +15,7 @@ export type Movement = {
   from_loc: string
   to_loc: string
   nota: string | null
+  sebab: string | null
   product_name: string
   units: Unit[] | null
   qty_total: number | null
@@ -55,9 +56,14 @@ export function rincianText(units: Unit[] | null): string {
     .join(' + ')
 }
 
-// Kolom: Waktu, Staff, Jenis, Dari, Ke, Produk, Rincian, Qty, Satuan, SKU, Nota --
-// harus tetap 11 dan urutannya persis begitu; tab Rekap Mutasi menunjuk kolom ini
-// lewat array literal di scripts/add_mutasi.py.
+// Kolom: Waktu, Staff, Jenis, Dari, Ke, Produk, Rincian, Qty, Satuan, SKU, Nota,
+// Sebab -- harus tetap 12 dan urutannya persis begitu; tab Rekap Mutasi menunjuk
+// kolom ini lewat array literal di scripts/add_mutasi.py.
+//
+// Sebab ditambahkan di UJUNG, bukan disisipkan di tengah. Formula tab Rekap Mutasi
+// dan tab Barang Rusak menyebut kolom per huruf, jadi menyisipkan di tengah
+// menggeser arti semua kolom sesudahnya tanpa ada yang error -- angkanya diam-diam
+// jadi salah.
 //
 // Kolom Jenis disimpan apa adanya dari DB, bukan disimpulkan dari nama lokasi.
 // Nama lokasi pernah berubah total ("Rak 1" jadi "Gudang Packaging") dan baris
@@ -87,6 +93,7 @@ export function buildMutasiRows(moves: Movement[]): { rows: MutasiRow[]; skipped
       baseUnit.variant,
       baseUnit.sku,
       m.nota ?? '',
+      m.sebab ?? '',
     ])
   }
 

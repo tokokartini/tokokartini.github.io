@@ -73,6 +73,20 @@ BARIS = [
     ("Isi ulang display 7 hari terakhir",
      '=IFERROR(COUNTIFS(Mutasi!E2:E;"Area Display";'
      'Mutasi!A2:A;">="&TEXT(TODAY()-7;"yyyy-mm-dd"));0)'),
+    None,
+
+    # Bagian ini SELALU ditaruh paling bawah. Menyisipkan di tengah menggeser nomor
+    # baris yang dipakai formula '=B8+B9' dan daftar RUPIAH di bawah.
+    ("#", "KERUGIAN BARANG"),
+    ("Barang rusak bulan ini",
+     '=IFERROR(COUNTIFS(\'Barang Rusak\'!A2:A;">="&TEXT(EOMONTH(TODAY();-1)+1;"yyyy-mm-dd"));0)'),
+    ("Nilai kerugian bulan ini",
+     '=IFERROR(SUMIFS(\'Barang Rusak\'!I2:I;\'Barang Rusak\'!A2:A;'
+     '">="&TEXT(EOMONTH(TODAY();-1)+1;"yyyy-mm-dd"));0)'),
+    ("Nilai kerugian seluruhnya", '=IFERROR(SUM(\'Barang Rusak\'!I2:I);0)'),
+    ("Sebab terbanyak bulan ini",
+     '=IFERROR(INDEX(SORT(QUERY(\'Barang Rusak\'!A2:I;'
+     '"select B, sum(I) where B <> \'\' group by B";0);2;FALSE);1;1);"belum ada")'),
 ]
 
 # Blok tabel di sebelah kanan.
@@ -94,8 +108,9 @@ BLOK = [
 ]
 
 # Baris yang isinya rupiah, bukan hitungan. Nomornya mengikuti urutan BARIS di atas:
-# B8 Gudang, B9 Display, B10 Jumlah, B17 nilai display minus, B23 nilai yang lewat ED.
-RUPIAH = ["B8", "B9", "B10", "B17", "B23"]
+# B8 Gudang, B9 Display, B10 Jumlah, B17 nilai display minus, B23 nilai yang lewat
+# ED, B34 kerugian bulan ini, B35 kerugian seluruhnya.
+RUPIAH = ["B8", "B9", "B10", "B17", "B23", "B34", "B35"]
 
 
 # --- Jaringan ---------------------------------------------------------------

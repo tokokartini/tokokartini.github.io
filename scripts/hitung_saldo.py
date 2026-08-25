@@ -32,6 +32,10 @@ import harga_lookup
 # --- Bagian murni: bisa diuji tanpa jaringan -------------------------------
 
 DISPLAY = "Area Display"
+# Lokasi maya, bukan tempat yang punya stok. Harus dibuang dari daftar lokasi atau
+# keduanya muncul sebagai "gudang" yang isinya menumpuk terus tanpa pernah keluar.
+# Kembar dengan SUPPLIER dan BUANG di src/lib/mutasi.js.
+MAYA = {"Barang Datang", "Barang Rusak"}
 
 
 def hitung_saldo(log_rows, mutasi_rows, lokasi_aktif, harga_rows=()):
@@ -174,6 +178,17 @@ def uji():
     m = dgn[("Gudang Packaging", "MKA")]
     assert m[9] == "" and m[10] == "", f"produk tanpa harga harus kosong, bukan 0: {m}"
 
+    # Barang rusak = mutasi ke lokasi maya. Harus mengurangi gudang asalnya,
+    # dan lokasi mayanya sendiri tidak boleh pernah punya baris saldo.
+    rusak = mutasi + [["2026-08-13 09:00:00", "rian", "Rusak", "Gudang Ciherang",
+                       "Barang Rusak", "Gula", "", "6", "Pack", "GLK", "", "Kadaluarsa"]]
+    hasil_r = hitung_saldo(log, rusak, lokasi)
+    gr = {(b[0], b[1]): b for b in hasil_r}[("Gudang Ciherang", "GLK")]
+    assert gr[7] == 31, f"barang rusak harus menambah Keluar (25+6): {gr}"
+    assert gr[8] == 249, f"sisa harus berkurang: {gr}"
+    assert not any(b[0] == "Barang Rusak" for b in hasil_r), \
+        "lokasi maya tidak boleh punya baris saldo"
+
     print("semua uji hitung_saldo LOLOS")
 
 
@@ -209,7 +224,7 @@ def tulis_sheet():
     # di kode -- lokasi baru di tabel racks langsung ikut tanpa mengubah skrip.
     lokasi = {_kolom(r, 2) for r in log if _kolom(r, 2)}
     lokasi |= {_kolom(r, 3) for r in mutasi} | {_kolom(r, 4) for r in mutasi}
-    lokasi -= {DISPLAY, "Barang Datang", ""}
+    lokasi -= MAYA | {DISPLAY, ""}
 
     baris = hitung_saldo(log, mutasi, lokasi, harga)
     print(f"{len(baris)} baris saldo di {len(lokasi)} lokasi", flush=True)

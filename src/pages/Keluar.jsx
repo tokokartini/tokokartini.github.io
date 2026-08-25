@@ -4,7 +4,9 @@ import { filterGroups } from '../lib/groupProducts'
 import { useProducts } from '../lib/useProducts'
 import { useMovements } from '../lib/useMovements'
 import { useRacks } from '../lib/racks'
-import { modeOf, lokasiPilihan, lokasiAwal, siapLanjut, seringDipakai } from '../lib/mutasi'
+import {
+  modeOf, lokasiPilihan, lokasiAwal, siapLanjut, seringDipakai, sebabSah, sebabUntuk, SEBAB,
+} from '../lib/mutasi'
 import CountForm from '../components/CountForm'
 
 const BATAS_HASIL = 20
@@ -20,6 +22,7 @@ export default function Keluar({ session, modeKey, tanpaSinyal, onSelesai }) {
   const [from, setFrom] = useState(awal.from)
   const [to, setTo] = useState(awal.to)
   const [nota, setNota] = useState('')
+  const [sebab, setSebab] = useState('')
   const [langkah, setLangkah] = useState('lokasi')
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(null) // { group, item|null }
@@ -60,7 +63,10 @@ export default function Keluar({ session, modeKey, tanpaSinyal, onSelesai }) {
     return sering.map((s) => groups.find((g) => g.name === s.product_name)).filter(Boolean)
   }, [sering, groups, mode.key])
 
-  const siap = siapLanjut(from, to)
+  // Jenis Rusak tidak boleh lanjut sebelum sebabnya dipilih: kalau tidak,
+  // constraint movements_sebab_rusak menolaknya di server dan petugas cuma
+  // melihat pesan gagal yang tidak menjelaskan apa-apa.
+  const siap = siapLanjut(from, to) && sebabSah(mode, sebabUntuk(mode, sebab))
   const rute = `${from} › ${to}`
 
   // Baris antrian ikut ditampilkan bersama baris server, ditandai "menunggu sinyal".
@@ -128,7 +134,8 @@ export default function Keluar({ session, modeKey, tanpaSinyal, onSelesai }) {
         brand: '',
         units: (terhapus.units || []).map((u, i) => ({ ...u, unit_order: i })),
       }
-      await saveItem(group, terhapus.units, mode.jenis, terhapus.nota || nota, null)
+      await saveItem(group, terhapus.units, mode.jenis, terhapus.nota || nota, null,
+        sebabUntuk(mode, terhapus.sebab || sebab))
       setTerhapus(null)
     } catch (e) {
       setHapusMsg(e.message)
@@ -189,6 +196,16 @@ export default function Keluar({ session, modeKey, tanpaSinyal, onSelesai }) {
                 onPilih={(nama) => pilihLokasi(sisiPilih, nama)}
               />
             </div>
+            {mode.sebab && (
+              <div className="card">
+                <p className="section-title">
+                  Sebab
+                  <span className="spacer" />
+                  <span className="muted">wajib dipilih</span>
+                </p>
+                <RackList daftar={SEBAB} dipilih={sebab} onPilih={setSebab} />
+              </div>
+            )}
             {mode.nota && (
               <div className="card">
                 <p className="section-title">Nota <span className="spacer" /><span className="muted">boleh kosong</span></p>
@@ -357,7 +374,7 @@ export default function Keluar({ session, modeKey, tanpaSinyal, onSelesai }) {
           showExpired={false}
           saveLabel="Simpan"
           onSave={async (units) => {
-            await saveItem(open.group, units, mode.jenis, nota, open.item?.id)
+            await saveItem(open.group, units, mode.jenis, nota, open.item?.id, sebabUntuk(mode, sebab))
             setOpen(null)
           }}
           onCancel={() => setOpen(null)}

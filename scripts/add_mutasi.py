@@ -33,11 +33,11 @@ KEY_PATH = os.environ.get(
     "SO_KEY_PATH", "/home/pianqt/Documents/Claude AI/claude-code-powershel-1427d99324cd.json")
 SHEET_ID = "1uP2ntR00nrstLXKTuCYw1IzWDKohQAKsaq3qeeApDgw"
 
-# Tab Mutasi -- 11 kolom, urutannya dikunci buildMutasiRows() di
+# Tab Mutasi -- 12 kolom, urutannya dikunci buildMutasiRows() di
 # supabase/functions/upload-mutasi/rows.ts. Kalau salah satu berubah, ubah keduanya.
 MUTASI_HEADER = [
     "Waktu", "Staff", "Jenis", "Dari", "Ke", "Produk",
-    "Rincian", "Qty", "Satuan", "SKU", "Nota",
+    "Rincian", "Qty", "Satuan", "SKU", "Nota", "Sebab",
 ]
 
 REKAP_HEADER = ["Tanggal", "Jenis", "Dari", "Ke", "SKU", "Produk", "Satuan", "Total Qty"]
@@ -101,13 +101,13 @@ def main():
     tab_lama = [ws.title for ws in retry(lambda: sh.worksheets())]
     print(f"Tab saat ini: {tab_lama}", flush=True)
 
-    mutasi = get_or_add_worksheet(sh, "Mutasi", rows=50000, cols=11)
+    mutasi = get_or_add_worksheet(sh, "Mutasi", rows=50000, cols=12)
     isi = retry(lambda: mutasi.get_all_values())
     baris_data = max(len(isi) - 1, 0)
     print(f"Tab Mutasi berisi {baris_data} baris data", flush=True)
 
     # Hanya baris judul yang ditulis ulang -- data yang sudah ada tidak disentuh.
-    retry(lambda: mutasi.update(values=[MUTASI_HEADER], range_name="A1:K1"))
+    retry(lambda: mutasi.update(values=[MUTASI_HEADER], range_name="A1:L1"))
     retry(lambda: mutasi.format("A1:K1", {"textFormat": {"bold": True}}))
 
     rekap = get_or_add_worksheet(sh, "Rekap Mutasi", rows=50000, cols=8)

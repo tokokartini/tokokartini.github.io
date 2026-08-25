@@ -12,6 +12,18 @@ export const DISPLAY = 'Area Display'
 // waktu SO -- cuma penanda "barang ini masuk dari luar toko".
 export const SUPPLIER = 'Barang Datang'
 
+// Lokasi maya kedua, kebalikan dari SUPPLIER: penanda "barang keluar dari toko
+// dan tidak balik". Bukan tempat, jadi TIDAK boleh ikut daftar lokasi yang punya
+// saldo -- scripts/hitung_saldo.py membuangnya bersama SUPPLIER, kalau tidak dia
+// muncul sebagai gudang palsu yang isinya menumpuk terus.
+export const BUANG = 'Barang Rusak'
+
+// Sebab barang keluar. 'Hilang' SENGAJA tidak ada: barang hilang ketahuan saat SO
+// lewat selisih hitungan fisik, dan hitungan itu langsung jadi titik awal baru.
+// Kalau disediakan di sini, orang memakainya untuk menutupi yang sebenarnya rusak
+// dan angka kerugian jadi tidak bisa dibaca.
+export const SEBAB = ['Rusak / pecah', 'Kadaluarsa', 'Dipakai toko sendiri']
+
 export const MODES = {
   display: {
     key: 'display',
@@ -58,9 +70,26 @@ export const MODES = {
     nota: false,
     kecuali: [DISPLAY],
   },
+  rusak: {
+    key: 'rusak',
+    jenis: 'Rusak',
+    judul: 'Barang Rusak / Kadaluarsa',
+    ico: '🗑',
+    sub: 'Barang dibuang, stoknya berkurang',
+    kunci: 'to',
+    tetap: BUANG,
+    tetapLabel: 'Tujuan',
+    tetapIco: '🗑',
+    tanya: 'Dibuang dari mana',
+    nota: false,
+    // Area Display ikut boleh: barang pajangan juga bisa rusak atau lewat ED.
+    kecuali: [],
+    // Satu-satunya jenis yang menuntut sebab.
+    sebab: true,
+  },
 }
 
-export const MODE_KEYS = ['display', 'datang', 'gudang']
+export const MODE_KEYS = ['display', 'datang', 'gudang', 'rusak']
 
 export function modeOf(key) {
   return MODES[key] || MODES.display
@@ -82,6 +111,21 @@ export function lokasiAwal(mode) {
 
 export function siapLanjut(from, to) {
   return Boolean(from) && Boolean(to) && from !== to
+}
+
+// Sebab hanya sah untuk jenis Rusak, dan di jenis itu wajib. Aturannya dikunci di
+// sini DAN di constraint movements_sebab_rusak: yang di sini supaya petugas dapat
+// pesan yang bisa dibaca, yang di DB supaya baris salah tidak pernah bisa masuk
+// lewat jalan lain (antrian offline, skrip, dashboard).
+export function sebabSah(mode, sebab) {
+  if (!mode.sebab) return !sebab
+  return SEBAB.includes(sebab)
+}
+
+// Sebab yang boleh ikut disimpan untuk sebuah jenis. Jenis selain Rusak selalu
+// mengirim '' supaya sebab tidak nyangkut waktu petugas berpindah jenis.
+export function sebabUntuk(mode, sebab) {
+  return mode.sebab ? sebab : ''
 }
 
 // Urutan produk di daftar "sering diisi ulang": paling sering dulu, lalu nama

@@ -79,6 +79,7 @@ export function useMovements(from, to, session) {
       units: item.units,
       qty_total: item.qty_total,
       nota: item.nota,
+      sebab: item.sebab,
       username: item.username,
       updated_at: item.updated_at,
     }
@@ -190,7 +191,7 @@ export function useMovements(from, to, session) {
     return () => window.removeEventListener('online', balikSinyal)
   }, [kirimAntrian])
 
-  async function saveItem(group, units, jenis, nota, existingId) {
+  async function saveItem(group, units, jenis, nota, existingId, sebab = '') {
     const qty_total = totalQty(units)
     if (qty_total <= 0) throw new Error('Jumlahnya masih 0 — isi dulu berapa yang dipindah')
 
@@ -210,6 +211,9 @@ export function useMovements(from, to, session) {
       units,
       qty_total,
       nota: nota || '',
+      // Kosong untuk tiga jenis lama. Constraint movements_sebab_rusak menolak
+      // sebab yang nyangkut di jenis selain Rusak, jadi ini harus benar-benar ''.
+      sebab: sebab || '',
       username,
       updated_at: new Date().toISOString(),
     }

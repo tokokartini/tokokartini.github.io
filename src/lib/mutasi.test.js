@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { MODES, DISPLAY, SUPPLIER, lokasiPilihan, lokasiAwal, siapLanjut, seringDipakai } from './mutasi'
+import {
+  MODES, MODE_KEYS, DISPLAY, SUPPLIER, BUANG, SEBAB,
+  modeOf, lokasiPilihan, lokasiAwal, siapLanjut, seringDipakai, sebabSah, sebabUntuk,
+} from './mutasi'
 
 const RACKS = ['Gudang Packaging', 'Gudang Bahan Kue', 'Gudang Ciherang', DISPLAY, 'Gudang Dapur Cherry']
 
@@ -69,5 +72,47 @@ describe('seringDipakai', () => {
   it('aman saat riwayat masih kosong', () => {
     expect(seringDipakai([])).toEqual([])
     expect(seringDipakai(null)).toEqual([])
+  })
+})
+
+describe('barang rusak', () => {
+  it('jenis rusak mengunci tujuan ke lokasi maya, asalnya bebas termasuk display', () => {
+    const m = modeOf('rusak')
+    expect(m.jenis).toBe('Rusak')
+    expect(lokasiAwal(m)).toEqual({ from: '', to: BUANG })
+    // Display harus boleh jadi asal -- barang pajangan juga bisa rusak.
+    expect(lokasiPilihan(m, ['Gudang Ciherang', DISPLAY])).toEqual(['Gudang Ciherang', DISPLAY])
+  })
+
+  it('lokasi maya tidak pernah muncul sebagai pilihan lokasi', () => {
+    // racks datang dari tabel racks, dan BUANG bukan baris di sana. Uji ini
+    // menjaga andai suatu hari ada yang menambahkannya ke DB.
+    for (const k of MODE_KEYS) {
+      expect(lokasiPilihan(modeOf(k), ['Gudang Ciherang', DISPLAY])).not.toContain(BUANG)
+    }
+  })
+
+  it('sebab wajib untuk rusak, dan harus dari daftar', () => {
+    const m = modeOf('rusak')
+    expect(sebabSah(m, 'Kadaluarsa')).toBe(true)
+    expect(sebabSah(m, '')).toBe(false)
+    expect(sebabSah(m, 'alasan karangan')).toBe(false)
+  })
+
+  it('sebab tidak boleh ikut jenis lain', () => {
+    for (const k of ['display', 'datang', 'gudang']) {
+      const m = modeOf(k)
+      expect(sebabSah(m, '')).toBe(true)
+      expect(sebabSah(m, 'Kadaluarsa')).toBe(false)
+      // Sebab yang tertinggal saat petugas pindah jenis dibuang, bukan terbawa.
+      expect(sebabUntuk(m, 'Kadaluarsa')).toBe('')
+    }
+    expect(sebabUntuk(modeOf('rusak'), 'Kadaluarsa')).toBe('Kadaluarsa')
+  })
+
+  it('Hilang sengaja bukan pilihan sebab', () => {
+    // Barang hilang ketahuan lewat selisih SO, bukan dicatat manual. Kalau
+    // disediakan, dipakai untuk menutupi yang sebenarnya rusak.
+    expect(SEBAB.some((s) => /hilang/i.test(s))).toBe(false)
   })
 })
