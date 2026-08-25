@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { rackProgress, staffActivity, latestEntries } from './adminStats'
+import {
+  rackProgress, staffActivity, latestEntries, mutasiRingkas, latestMoves, JENIS_URUT,
+} from './adminStats'
 
 // created_at UTC; 2026-07-28T18:00Z = 2026-07-29 01:00 WIB
 // Fixture sengaja TIDAK berurutan by created_at, biar latestEntries beneran harus sort.
@@ -68,5 +70,47 @@ describe('latestEntries', () => {
     expect(l).toHaveLength(2)
     expect(l[0].product_name).toBe('Mika DP 7C')
     expect(l[1].product_name).toBe('Mentega Simas')
+  })
+})
+
+describe('mutasiRingkas', () => {
+  const now = new Date('2026-08-25T05:00:00.000Z')   // 12:00 WIB
+  const MOVES = [
+    { jenis: 'Datang', qty_total: 200, username: 'rian', created_at: '2026-08-25T02:00:00.000Z',
+      updated_at: '2026-08-25T02:00:00.000Z', uploaded_at: '2026-08-25T02:05:00.000Z' },
+    { jenis: 'Isi Ulang', qty_total: 25, username: 'dewo', created_at: '2026-08-25T03:00:00.000Z',
+      updated_at: '2026-08-25T03:00:00.000Z', uploaded_at: null },
+    { jenis: 'Rusak', qty_total: 4, username: 'rian', created_at: '2026-08-20T03:00:00.000Z',
+      updated_at: '2026-08-20T03:00:00.000Z', uploaded_at: '2026-08-20T03:10:00.000Z' },
+  ]
+
+  it('mengelompokkan per jenis dengan urutan tetap', () => {
+    const r = mutasiRingkas(MOVES, now)
+    expect(r.map((x) => x.jenis)).toEqual(JENIS_URUT)
+  })
+
+  it('jenis tanpa baris tetap muncul dengan nol, bukan hilang', () => {
+    const r = mutasiRingkas(MOVES, now)
+    const pindah = r.find((x) => x.jenis === 'Pindah')
+    expect(pindah).toMatchObject({ total: 0, today: 0, open: 0, qty: 0, lastAt: null })
+  })
+
+  it('menghitung hari ini, terbuka, dan jumlah qty', () => {
+    const r = Object.fromEntries(mutasiRingkas(MOVES, now).map((x) => [x.jenis, x]))
+    expect(r.Datang).toMatchObject({ total: 1, today: 1, open: 0, qty: 200 })
+    expect(r['Isi Ulang']).toMatchObject({ total: 1, today: 1, open: 1, qty: 25 })
+    // Lima hari lalu -> masuk total tapi bukan hari ini.
+    expect(r.Rusak).toMatchObject({ total: 1, today: 0, open: 0, qty: 4 })
+  })
+
+  it('jenis asing tetap ditampilkan, tidak dibuang diam-diam', () => {
+    const r = mutasiRingkas([...MOVES, { jenis: 'Entah', qty_total: 1, username: 'x',
+      created_at: '2026-08-25T04:00:00.000Z', updated_at: '2026-08-25T04:00:00.000Z',
+      uploaded_at: null }], now)
+    expect(r.find((x) => x.jenis === 'Entah')).toMatchObject({ total: 1 })
+  })
+
+  it('latestMoves urut terbaru dulu dan dipotong', () => {
+    expect(latestMoves(MOVES, 2).map((m) => m.jenis)).toEqual(['Isi Ulang', 'Datang'])
   })
 })

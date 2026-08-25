@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import { rackProgress, staffActivity, latestEntries } from '../lib/adminStats'
+import {
+  rackProgress, staffActivity, latestEntries, mutasiRingkas, latestMoves,
+} from '../lib/adminStats'
 
 const jam = (iso) =>
   iso
@@ -35,9 +37,30 @@ async function fetchAllEntries() {
   return all
 }
 
+// Sejajar dengan fetchAllEntries: 30 hari terakhir, tapi surat jalan yang belum
+// ter-upload tidak pernah dibuang berapa pun umurnya -- kalau dibuang, "siapa yang
+// belum kirim" jadi tidak terjawab, persis alasan yang sama seperti di entri SO.
+async function fetchAllMoves() {
+  const all = []
+  const since = new Date(Date.now() - 30 * 86400e3).toISOString()
+  for (let page = 0; page < 10; page++) {
+    const { data, error } = await supabase
+      .from('movements')
+      .select('username, jenis, from_loc, to_loc, sebab, product_name, qty_total, created_at, updated_at, uploaded_at')
+      .or(`created_at.gte.${since},uploaded_at.is.null`)
+      .order('created_at', { ascending: false })
+      .range(page * 1000, page * 1000 + 999)
+    if (error) throw error
+    all.push(...data)
+    if (data.length < 1000) break
+  }
+  return all
+}
+
 export default function Admin() {
   const [entries, setEntries] = useState(null)
   const [racks, setRacks] = useState([])
+  const [moves, setMoves] = useState(null)
   const [loadErr, setLoadErr] = useState(false)
 
   const [accounts, setAccounts] = useState([])
@@ -62,13 +85,15 @@ export default function Admin() {
     setLoadErr(false)
     setEntries(null)
     try {
-      const [ents, rk] = await Promise.all([
+      const [ents, rk, mv] = await Promise.all([
         fetchAllEntries(),
         supabase.from('racks').select('name').eq('active', true).order('sort'),
+        fetchAllMoves(),
       ])
       if (rk.error) throw rk.error
       setEntries(ents)
       setRacks((rk.data || []).map((r) => r.name))
+      setMoves(mv)
     } catch {
       setLoadErr(true)
     }
@@ -97,6 +122,8 @@ export default function Admin() {
   const racksView = useMemo(() => (entries ? rackProgress(entries, racks) : []), [entries, racks])
   const staff = useMemo(() => (entries ? staffActivity(entries) : []), [entries])
   const latest = useMemo(() => (entries ? latestEntries(entries) : []), [entries])
+  const mutasi = useMemo(() => (moves ? mutasiRingkas(moves) : []), [moves])
+  const mutasiBaru = useMemo(() => (moves ? latestMoves(moves) : []), [moves])
   const total = useMemo(
     () => ({
       hariIni: staff.reduce((n, a) => n + a.today, 0),
@@ -271,6 +298,37 @@ export default function Admin() {
                 <span className="k">{a.username}</span>
                 {a.open > 0 && <span className="badge soft">{a.open} belum upload</span>}
                 <span className="v">{a.today} hari ini · {a.total} total · {jam(a.lastAt)}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="card">
+            <p className="section-title">Mutasi barang</p>
+            {mutasi.every((m) => m.total === 0) && (
+              <p className="muted">Belum ada surat jalan 30 hari terakhir</p>
+            )}
+            {mutasi.filter((m) => m.total > 0).map((m) => (
+              <div className="data-row" key={m.jenis}>
+                <span className="k">{m.jenis}</span>
+                {m.open > 0 && <span className="badge soft">{m.open} belum kirim</span>}
+                <span className="v">
+                  {m.today} hari ini · {m.total} total · {m.qty} qty · {jam(m.lastAt)}
+                </span>
+              </div>
+            ))}
+          </div>
+
+          <div className="card">
+            <p className="section-title">Surat jalan terbaru</p>
+            {mutasiBaru.length === 0 && <p className="muted">Belum ada</p>}
+            {mutasiBaru.map((m, i) => (
+              <div className="data-row" key={i}>
+                <span className="k">{m.product_name}</span>
+                <span className="v">
+                  {m.qty_total} · {m.jenis}
+                  {m.sebab ? ` (${m.sebab})` : ''} · {m.from_loc} → {m.to_loc} ·{' '}
+                  {m.username} · {jam(m.created_at)}
+                </span>
               </div>
             ))}
           </div>
