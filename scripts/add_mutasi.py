@@ -6,6 +6,7 @@ menyentuh dua tab barunya sendiri -- Rekap!G1 tidak dikosongkan, formula Log /
 Rekap / Template Olsera / Arsip tidak disentuh. Jadi aman dijalankan kapan saja,
 termasuk saat SO sedang berjalan, dan aman diulang.
 """
+import os
 import socket
 import time
 import warnings
@@ -26,7 +27,10 @@ def _ipv4_saja(host, port, family=0, type=0, proto=0, flags=0):
 
 socket.getaddrinfo = _ipv4_saja
 
-KEY_PATH = "/home/pianqt/Documents/Claude AI/claude-code-powershel-1427d99324cd.json"
+# Bisa ditimpa lewat env SO_KEY_PATH supaya skrip yang sama bisa jalan di
+# GitHub Actions, di mana kunci ditulis ke berkas sementara.
+KEY_PATH = os.environ.get(
+    "SO_KEY_PATH", "/home/pianqt/Documents/Claude AI/claude-code-powershel-1427d99324cd.json")
 SHEET_ID = "1uP2ntR00nrstLXKTuCYw1IzWDKohQAKsaq3qeeApDgw"
 
 # Tab Mutasi -- 11 kolom, urutannya dikunci buildMutasiRows() di

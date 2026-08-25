@@ -34,6 +34,7 @@ dikerjakan QUERY sheet tanpa jadi rumus raksasa yang tak bisa diuji. Jalankan ul
 skrip ini tiap kali mau angka terbaru.
 """
 import argparse
+import os
 import socket
 import sys
 import time
@@ -267,7 +268,10 @@ def uji():
 
 # --- Bagian yang menyentuh jaringan ----------------------------------------
 
-KEY_PATH = "/home/pianqt/Documents/Claude AI/claude-code-powershel-1427d99324cd.json"
+# Bisa ditimpa lewat env SO_KEY_PATH supaya skrip yang sama bisa jalan di
+# GitHub Actions, di mana kunci ditulis ke berkas sementara.
+KEY_PATH = os.environ.get(
+    "SO_KEY_PATH", "/home/pianqt/Documents/Claude AI/claude-code-powershel-1427d99324cd.json")
 SHEET_ID = "1uP2ntR00nrstLXKTuCYw1IzWDKohQAKsaq3qeeApDgw"
 
 

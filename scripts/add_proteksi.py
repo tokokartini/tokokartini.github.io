@@ -21,6 +21,7 @@ Tab Log tidak diproteksi selain baris judulnya; badan Log ditulis Edge Function
 `upload-rak` dan tidak boleh ada apa pun yang menghalanginya.
 """
 import argparse
+import os
 import socket
 import sys
 import warnings
@@ -44,7 +45,10 @@ LINDUNGI = [
     ("Mutasi", "A1:K1", "baris judul saja — badan Mutasi ditulis upload-mutasi"),
 ]
 
-KEY_PATH = "/home/pianqt/Documents/Claude AI/claude-code-powershel-1427d99324cd.json"
+# Bisa ditimpa lewat env SO_KEY_PATH supaya skrip yang sama bisa jalan di
+# GitHub Actions, di mana kunci ditulis ke berkas sementara.
+KEY_PATH = os.environ.get(
+    "SO_KEY_PATH", "/home/pianqt/Documents/Claude AI/claude-code-powershel-1427d99324cd.json")
 SHEET_ID = "1uP2ntR00nrstLXKTuCYw1IzWDKohQAKsaq3qeeApDgw"
 
 

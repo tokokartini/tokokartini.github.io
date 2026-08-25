@@ -19,6 +19,7 @@ Tanggal ED ditulis aplikasi dari `<input type="date">`, jadi bentuknya selalu
 Locale sheet `in_ID`: pemisah argumen `;` dan pemisah kolom array `\\`.
 """
 import argparse
+import os
 import socket
 import sys
 import time
@@ -50,7 +51,10 @@ def formula_query(sumber=SUMBER):
 
 # --- Jaringan ---------------------------------------------------------------
 
-KEY_PATH = "/home/pianqt/Documents/Claude AI/claude-code-powershel-1427d99324cd.json"
+# Bisa ditimpa lewat env SO_KEY_PATH supaya skrip yang sama bisa jalan di
+# GitHub Actions, di mana kunci ditulis ke berkas sementara.
+KEY_PATH = os.environ.get(
+    "SO_KEY_PATH", "/home/pianqt/Documents/Claude AI/claude-code-powershel-1427d99324cd.json")
 SHEET_ID = "1uP2ntR00nrstLXKTuCYw1IzWDKohQAKsaq3qeeApDgw"
 
 
