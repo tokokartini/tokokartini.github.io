@@ -25,6 +25,7 @@ import time
 import warnings
 from collections import defaultdict
 
+import arsip_saldo
 import harga_lookup
 
 # --- Bagian murni: bisa diuji tanpa jaringan -------------------------------
@@ -233,6 +234,13 @@ def tulis_sheet():
               range_name="M1")
     print(f"Nilai stok gudang Rp {total:,.0f}, {tanpa} baris tanpa harga", flush=True)
     print(f"Tab 'Stok Gudang' ditulis ulang, {len(baris)} baris, stempel {stempel}", flush=True)
+
+    # Potret harian: Stok Gudang ditimpa tiap jalan, arsip yang menyimpan riwayatnya.
+    baru, lama_tetap = arsip_saldo.simpan(
+        sh, stempel[:10], lokasi,
+        [[b[0], b[1], b[2], b[3], b[8], b[9], b[10]] for b in baris])
+    print(f"Arsip Saldo: {baru} baris potret hari ini, {lama_tetap} baris lama dipertahankan",
+          flush=True)
 
     for b in baris[:5]:
         print("   ", b, flush=True)

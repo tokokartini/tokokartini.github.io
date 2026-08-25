@@ -40,6 +40,7 @@ import time
 import warnings
 from collections import defaultdict
 
+import arsip_saldo
 import harga_lookup
 
 DISPLAY = "Area Display"
@@ -323,6 +324,14 @@ def tulis_sheet():
     print(f"Nilai stok display Rp {total:,.0f}, {tanpa} baris tanpa harga", flush=True)
 
     print(f"Tab '{TAB}' ditulis ulang, {len(baris)} baris, stempel {stempel}", flush=True)
+
+    # Potret harian, sama seperti gudang. Lokasi yang ditulis cuma Area Display,
+    # jadi baris gudang milik hitung_saldo.py tidak ikut tersapu.
+    baru, lama_tetap = arsip_saldo.simpan(
+        sh, stempel[:10], {DISPLAY},
+        [[DISPLAY, b[1], b[0], b[2], b[8], b[9], b[10]] for b in baris])
+    print(f"Arsip Saldo: {baru} baris potret hari ini, {lama_tetap} baris lama dipertahankan",
+          flush=True)
     for p in peringatan:
         print("  PERHATIAN:", p, flush=True)
     for b in baris[:5]:
