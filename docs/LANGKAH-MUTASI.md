@@ -94,27 +94,44 @@ jadi tidak mengganggu apa pun kalau menganggur.
 
 ---
 
-## Fase 2 — belum digarap
+## Fase 2 — saldo per lokasi
 
-Saldo per lokasi dan daftar isi ulang harian. Rumusnya:
+| Lokasi | Rumus | Butuh Olsera | Skrip | Tab |
+|---|---|---|---|---|
+| Gudang | SO terakhir + datang + masuk − keluar | tidak | `scripts/hitung_saldo.py` | Stok Gudang |
+| Area Display | SO terakhir + isi ulang − keluar − penjualan | ya | `scripts/saldo_display.py` | Stok Display |
+| Pemeriksa | gudang + display = stok Olsera | ya | belum ada | — |
 
-| Lokasi | Rumus | Butuh Olsera |
-|---|---|---|
-| Gudang | SO terakhir + datang + masuk − keluar | tidak |
-| Area Display | SO terakhir + isi ulang − penjualan | ya |
-| Pemeriksa | gudang + display = stok Olsera | ya |
+Semua skrip punya `--uji` yang jalan tanpa jaringan dan ikut dijalankan otomatis
+sebelum menulis sheet, jadi sheet tak pernah ditulis dengan logika rusak.
 
-Sumber penjualan: export Olsera **Qty Produk Terjual** (rentang tanggal bebas).
-Tiga jebakan yang sudah dicek di file contoh
-`~/Documents/Claude AI/Laporan Penjualan/katalog/`:
+Urutan jalannya untuk display:
+
+```
+export Olsera  ->  peta_satuan.py  ->  import_penjualan.py  ->  saldo_display.py
+                   (tab Peta Satuan)   (tab Penjualan)          (tab Stok Display)
+```
+
+Sumber penjualan: export Olsera **Qty Produk Terjual** (rentang tanggal bebas),
+contohnya di `~/Documents/Claude AI/Laporan Penjualan/katalog/`. Empat jebakan
+yang sudah ditangani, semuanya dengan cara MELAPORKAN, bukan menebak:
 
 1. `sales qty` per varian, bukan satuan dasar — 9 "Box (12 pcs)" = 108 Pcs.
-   Konversinya pakai `mult` di tabel `products`, jangan dihitung ulang.
-2. Sebagian baris `sku`-nya kosong (Almond Slice, Alu Cup, Alu Tray) — cocokkan
-   lewat nama + varian, dan yang tetap tidak ketemu **dilaporkan**, jangan
-   dibuang diam-diam. Kalau dibuang, saldo display kelihatan lebih banyak dari
-   kenyataan.
-3. Export per rentang, bukan per hari — saldo display akurat sampai export
-   terakhir saja.
+   Konversinya lewat kolom Isi di tab Peta Satuan Olsera.
+2. Sebagian baris `sku`-nya kosong (Almond Slice, Alu Cup, Alu Tray) — dicocokkan
+   lewat nama + varian, dan yang tetap tidak ketemu masuk tab **Penjualan Tak
+   Cocok** lengkap dengan omzetnya. Kalau dibuang diam-diam, saldo display
+   kelihatan lebih banyak dari kenyataan dan tak ada yang tahu sebabnya.
+3. Export per rentang, bukan per hari. Rentang yang **melintasi** hari SO display
+   (mulai sebelum, berakhir sesudah) tidak dihitung sama sekali — sebagiannya
+   sudah tercermin di hasil hitungan fisik dan tak ada cara memisahkannya. Baris
+   begitu diberi catatan di tab Stok Display supaya ketahuan belum lengkap.
+4. Kalau Area Display belum pernah di-SO, kolom Sisa **dikosongkan**. Tanpa titik
+   awal, `isi ulang − penjualan` bukan sisa stok, cuma selisih.
 
-Garap fase 2 setelah fase 1 terbukti benar-benar diisi karyawan.
+Sisa display **boleh minus** dan minus itu sinyal, bukan bug: ada barang laku yang
+isi ulangnya tidak pernah dicatat. Jangan pernah dipaksa jadi 0.
+
+Yang belum digarap: tab Pemeriksa (`gudang + display` lawan stok Olsera) dan
+daftar "Isi Ulang Hari Ini". Keduanya menunggu Area Display benar-benar di-SO
+sekali — sebelum itu tidak ada titik awal untuk dibandingkan.
