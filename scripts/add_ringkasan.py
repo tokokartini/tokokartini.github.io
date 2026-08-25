@@ -4,19 +4,18 @@
     python3 -u add_ringkasan.py            # pasang / perbarui tab Ringkasan
     python3 -u add_ringkasan.py --uji      # pasang, uji pakai data palsu, lalu pulihkan
 
-Sheet ini punya 13 tab dan semuanya rincian. Tidak ada satu pun yang menjawab
-"hari ini saya harus ngapain". Tab Ringkasan menjawab itu: berapa nilai stok,
-lokasi mana yang belum di-SO, produk apa yang minus, barang apa yang mau ED.
+Semua tab lain isinya rincian. Tidak ada satu pun yang menjawab "hari ini saya
+harus ngapain". Tab Ringkasan menjawab itu: berapa nilai stok, lokasi mana yang
+belum di-SO, produk apa yang minus, barang apa yang mau ED, dan mana yang selisih.
 
-Semua isinya FORMULA yang membaca tab lain, jadi ikut terbarui sendiri. Yang tidak
-otomatis cuma dua tab sumbernya (Stok Gudang & Stok Display) karena keduanya
-ditulis skrip — stempel waktu hitungnya sengaja ditampilkan di sini supaya
-ketahuan kalau angkanya sudah basi.
+Semua isinya FORMULA yang membaca tab lain, jadi ikut terbarui sendiri. Dua tab
+sumbernya (Stok & Selisih SO) ditulis skrip, dan penanda basi di baris 1 masing-
+masing ikut ditampilkan di sini supaya ketahuan kalau angkanya sudah lewat sehari.
 
-`--uji` mengisi Stok Gudang & Stok Display dengan data palsu, membaca kembali
-Ringkasan untuk memeriksa angkanya, lalu MEMULIHKAN kedua tab itu dengan
-menjalankan ulang skrip aslinya. Aman karena dua tab itu memang milik skrip dan
-ditimpa tiap kali dijalankan. Log TIDAK pernah disentuh.
+`--uji` mengisi tab Stok dengan data palsu, membaca kembali Ringkasan untuk
+memeriksa angkanya, lalu MEMULIHKAN tab itu dengan menjalankan ulang
+`hitung_stok.py`. Aman karena tab Stok memang milik skrip dan ditimpa tiap kali
+dijalankan. Log TIDAK pernah disentuh.
 
 Locale sheet `in_ID`: pemisah argumen `;`.
 """
@@ -42,21 +41,26 @@ BARIS = [
      '=IF(COUNTIF(Log!C2:C;"Area Display")>0;"sudah";"BELUM — sisa display belum bisa dihitung")'),
     None,
 
+    # Tab Stok: baris 1 penanda, 2 judul, data mulai baris 3. A Lokasi ... J Sisa,
+    # K HPP, L Nilai Sisa.
     ("#", "NILAI STOK (HPP)"),
-    ("Gudang", '=IFERROR(SUM(\'Stok Gudang\'!K2:K);0)'),
-    ("Area Display", '=IFERROR(SUM(\'Stok Display\'!K2:K);0)'),
+    ("Gudang", '=IFERROR(SUMIF(Stok!A3:A;"<>Area Display";Stok!L3:L);0)'),
+    ("Area Display", '=IFERROR(SUMIF(Stok!A3:A;"Area Display";Stok!L3:L);0)'),
     ("Jumlah", '=B8+B9'),
-    ("Gudang dihitung", '=IFERROR(\'Stok Gudang\'!M1;"belum pernah dihitung")'),
-    ("Display dihitung", '=IFERROR(\'Stok Display\'!O1;"belum pernah dihitung")'),
-    ("Harga ditarik", '=IFERROR(Harga!J1;"tab Harga belum ada")'),
+    # Penanda di Stok!A1 sudah berbunyi sendiri kalau angkanya lewat sehari.
+    ("Stok", '=IFERROR(Stok!A1;"tab Stok belum ada")'),
+    ("Harga", '=IFERROR(Harga!J1;"tab Harga belum ada")'),
     None,
 
     ("#", "PERLU PERHATIAN"),
-    ("Produk display sisa MINUS", '=IFERROR(COUNTIF(\'Stok Display\'!I2:I;"<0");0)'),
-    ("Nilai display minus", '=IFERROR(SUMIF(\'Stok Display\'!I2:I;"<0";\'Stok Display\'!K2:K);0)'),
-    ("Produk gudang sisa MINUS", '=IFERROR(COUNTIF(\'Stok Gudang\'!I2:I;"<0");0)'),
-    ("Baris saldo tanpa harga",
-     '=IFERROR(COUNTBLANK(\'Stok Gudang\'!J2:J)-COUNTBLANK(\'Stok Gudang\'!A2:A);0)'),
+    ("Produk display sisa MINUS",
+     '=IFERROR(COUNTIFS(Stok!A3:A;"Area Display";Stok!J3:J;"<0");0)'),
+    ("Nilai display minus",
+     '=IFERROR(SUMIFS(Stok!L3:L;Stok!A3:A;"Area Display";Stok!J3:J;"<0");0)'),
+    ("Produk gudang sisa MINUS",
+     '=IFERROR(COUNTIFS(Stok!A3:A;"<>Area Display";Stok!J3:J;"<0");0)'),
+    ("Baris stok tanpa harga",
+     '=IFERROR(COUNTBLANK(Stok!K3:K)-COUNTBLANK(Stok!A3:A);0)'),
     None,
 
     ("#", "KADALUARSA"),
@@ -66,13 +70,12 @@ BARIS = [
     ("ED dalam 90 hari", '=IFERROR(COUNTIF(Kadaluarsa!J2:J;"90 hari");0)'),
     None,
 
+    # SUMPRODUCT, BUKAN COUNTIFS. Kolom waktu di tab Mutasi itu TEKS, dan COUNTIFS
+    # dengan syarat ">=tanggal" menganggapnya angka sehingga tidak pernah cocok --
+    # hasilnya diam-diam 0, tanpa error. Perbandingan teks di SUMPRODUCT jalan, dan
+    # bentuk YYYY-MM-DD urutan hurufnya sama dengan urutan tanggalnya.
     ("#", "MUTASI BARANG"),
     ("Baris mutasi seluruhnya", '=COUNTA(Mutasi!A2:A)'),
-    # SUMPRODUCT, BUKAN COUNTIFS. Kolom waktu di tab Mutasi itu TEKS
-    # ("2026-08-25 15:00:02"), dan COUNTIFS dengan syarat ">=tanggal" menganggapnya
-    # angka sehingga tidak pernah cocok -- hasilnya diam-diam 0, tanpa error.
-    # Perbandingan teks di dalam SUMPRODUCT jalan, dan bentuk YYYY-MM-DD urutan
-    # hurufnya sama dengan urutan tanggalnya.
     ("7 hari terakhir",
      '=IFERROR(SUMPRODUCT((Mutasi!A2:A<>"")*'
      '(LEFT(Mutasi!A2:A;10)>=TEXT(TODAY()-7;"yyyy-mm-dd")));0)'),
@@ -81,11 +84,9 @@ BARIS = [
      '(LEFT(Mutasi!A2:A;10)>=TEXT(TODAY()-7;"yyyy-mm-dd")));0)'),
     None,
 
-    # Bagian ini SELALU ditaruh paling bawah. Menyisipkan di tengah menggeser nomor
-    # baris yang dipakai formula '=B8+B9' dan daftar RUPIAH di bawah.
-    ("#", "KERUGIAN BARANG"),
     # Alasan sama: kolom Tanggal di tab Barang Rusak juga teks. Cocokkan awalan
     # "2026-08*" pakai wildcard, itu perbandingan teks yang memang jalan.
+    ("#", "KERUGIAN BARANG"),
     ("Barang rusak bulan ini",
      '=IFERROR(COUNTIF(\'Barang Rusak\'!A2:A;TEXT(TODAY();"yyyy-mm")&"*");0)'),
     ("Nilai kerugian bulan ini",
@@ -94,38 +95,38 @@ BARIS = [
     ("Nilai kerugian seluruhnya", '=IFERROR(SUM(\'Barang Rusak\'!I2:I);0)'),
     None,
 
-    # Ditambahkan paling bawah, alasan sama seperti bagian KERUGIAN di atas.
+    # Tab Selisih SO juga baris 1 penanda, 2 judul, data mulai 3.
     ("#", "SELISIH SO"),
-    # COUNT (bukan COUNTA) supaya baris penanda "(semua cocok)" tidak ikut terhitung.
-    ("Produk yang selisih", '=IFERROR(COUNT(\'Selisih SO\'!H2:H);0)'),
-    ("Nilai barang kurang", '=IFERROR(-SUMIF(\'Selisih SO\'!J2:J;"<0");0)'),
-    ("Nilai barang lebih", '=IFERROR(SUMIF(\'Selisih SO\'!J2:J;">0");0)'),
-    ("Selisih dihitung", '=IFERROR(\'Selisih SO\'!M1;"belum pernah dihitung")'),
+    ("Produk yang selisih", '=IFERROR(COUNT(\'Selisih SO\'!H3:H);0)'),
+    ("Nilai barang kurang", '=IFERROR(-SUMIF(\'Selisih SO\'!J3:J;"<0");0)'),
+    ("Nilai barang lebih", '=IFERROR(SUMIF(\'Selisih SO\'!J3:J;">0");0)'),
+    ("Selisih", '=IFERROR(\'Selisih SO\'!A1;"belum pernah dihitung")'),
 ]
 
-# Blok tabel di sebelah kanan.
+# Baris yang isinya rupiah. Nomornya mengikuti urutan BARIS di atas: B8 gudang,
+# B9 display, B10 jumlah, B16 nilai display minus, B22 nilai lewat ED, B33 kerugian
+# bulan ini, B34 kerugian seluruhnya, B38 barang kurang, B39 barang lebih.
+RUPIAH = ["B8", "B9", "B10", "B16", "B22", "B33", "B34", "B38", "B39"]
+
 BLOK = [
-    ("D1", "PER LOKASI",
-     '=IFERROR(QUERY(\'Stok Gudang\'!A2:K;'
-     '"select A, max(F), count(B), sum(K) where A is not null and A <> \'\' '
+    ("D1", "PROGRES SO PER LOKASI",
+     '=IFERROR(QUERY(Log!A2:I;'
+     '"select C, count(D), max(A) where C is not null and C <> \'\' '
+     'group by C order by C '
+     'label C \'Lokasi\', count(D) \'Produk\', max(A) \'Terakhir\'";0);'
+     '"belum ada SO")'),
+    ("I1", "NILAI STOK PER LOKASI",
+     '=IFERROR(QUERY(Stok!A3:L;'
+     '"select A, count(B), sum(L) where A is not null and A <> \'\' '
      'group by A order by A '
-     'label A \'Lokasi\', max(F) \'Tgl SO\', count(B) \'Jumlah SKU\', sum(K) \'Nilai HPP\'";0);'
-     '"belum ada saldo gudang — jalankan scripts/hitung_saldo.py")'),
-    ("I1", "10 DISPLAY PALING MINUS",
-     '=IFERROR(QUERY(\'Stok Display\'!A2:K;'
-     '"select A, I, K where I < 0 order by K asc limit 10 '
-     'label A \'Produk\', I \'Sisa\', K \'Nilai\'";0);"tidak ada yang minus")'),
-    ("M1", "10 PALING DEKAT ED",
-     '=IFERROR(QUERY(Kadaluarsa!A2:K;'
-     '"select A, C, E, J where A is not null and A <> \'\' order by A limit 10 '
-     'label A \'ED\', C \'Produk\', E \'Qty\', J \'Status\'";0);"belum ada data ED")'),
+     'label A \'Lokasi\', count(B) \'Jumlah SKU\', sum(L) \'Nilai HPP\'";0);'
+     '"belum ada stok — jalankan hitung saldo")'),
+    ("N1", "10 SELISIH TERBESAR",
+     '=IFERROR(QUERY(\'Selisih SO\'!A3:K;'
+     '"select D, B, H, J where H is not null order by J asc limit 10 '
+     'label D \'Produk\', B \'Lokasi\', H \'Selisih\', J \'Nilai\'";0);'
+     '"tidak ada selisih")'),
 ]
-
-# Baris yang isinya rupiah, bukan hitungan. Nomornya mengikuti urutan BARIS di atas:
-# B8 Gudang, B9 Display, B10 Jumlah, B17 nilai display minus, B23 nilai yang lewat
-# ED, B34 kerugian bulan ini, B35 kerugian seluruhnya, B39 barang kurang,
-# B40 barang lebih.
-RUPIAH = ["B8", "B9", "B10", "B17", "B23", "B34", "B35", "B39", "B40"]
 
 
 # --- Jaringan ---------------------------------------------------------------
@@ -188,36 +189,25 @@ def periksa(ws):
 
 
 def uji_dengan_data_palsu(sh, ws):
-    """Isi dua tab saldo dengan data palsu, periksa angka Ringkasan, lalu pulihkan."""
-    gudang = sh.worksheet("Stok Gudang")
-    display = sh.worksheet("Stok Display")
-
-    gudang.clear()
-    gudang.update(values=[
+    """Isi tab Stok dengan data palsu, periksa angka Ringkasan, lalu pulihkan."""
+    stok = sh.worksheet("Stok")
+    stok.clear()
+    stok.update(values=[
+        ["(uji)", ""],
         ["Lokasi", "SKU", "Produk", "Satuan", "Hasil SO", "Tgl SO", "Masuk", "Keluar",
-         "Sisa", "HPP", "Nilai Sisa"],
-        ["Gudang Ciherang", "A1", "Gula", "Pack", 10, "2026-08-20", 0, 0, 10, 12000, 120000],
-        ["Gudang Ciherang", "A2", "Ceres", "Pcs", 5, "2026-08-20", 0, 0, 5, 5000, 25000],
-        ["Gudang Packaging", "A3", "Mika", "Pcs", 3, "2026-08-21", 0, 0, -2, 1000, -2000],
-        # baris tanpa harga -> harus ikut terhitung di "Baris saldo tanpa harga"
-        ["Gudang Packaging", "A4", "Entah", "Pcs", 1, "2026-08-21", 0, 0, 1, "", ""],
-    ], range_name="A1")
-
-    display.clear()
-    display.update(values=[
-        ["Produk", "SKU", "Satuan", "Hasil SO", "Tgl SO", "Isi Ulang", "Keluar", "Terjual",
-         "Sisa", "HPP", "Nilai Sisa", "Nilai Terjual (HPP)", "Catatan"],
-        ["Gula", "A1", "Pack", 4, "2026-08-20", 0, 0, 1, 3, 12000, 36000, 12000, ""],
-        ["Kopi", "A9", "Pcs", 0, "2026-08-20", 0, 0, 8, -8, 2000, -16000, 16000, ""],
-        ["Teh", "A8", "Pcs", 0, "2026-08-20", 0, 0, 5, -5, 1000, -5000, 5000, ""],
+         "Terjual", "Sisa", "HPP", "Nilai Sisa", "Catatan"],
+        ["Gudang Ciherang", "A1", "Gula", "Pack", 10, "2026-08-20", 0, 0, "", 10, 12000, 120000, ""],
+        ["Gudang Ciherang", "A2", "Ceres", "Pcs", 5, "2026-08-20", 0, 0, "", 5, 5000, 25000, ""],
+        ["Gudang Packaging", "A3", "Mika", "Pcs", 3, "2026-08-21", 0, 0, "", -2, 1000, -2000, ""],
+        # baris tanpa harga -> harus ikut terhitung di "Baris stok tanpa harga"
+        ["Gudang Packaging", "A4", "Entah", "Pcs", 1, "2026-08-21", 0, 0, "", 1, "", "", ""],
+        ["Area Display", "A1", "Gula", "Pack", 4, "2026-08-20", 0, 0, 1, 3, 12000, 36000, ""],
+        ["Area Display", "A9", "Kopi", "Pcs", 0, "2026-08-20", 0, 0, 8, -8, 2000, -16000, ""],
+        ["Area Display", "A8", "Teh", "Pcs", 0, "2026-08-20", 0, 0, 5, -5, 1000, -5000, ""],
     ], range_name="A1")
 
     time.sleep(4)
     nilai = {r[0]: (r[1] if len(r) > 1 else "") for r in ws.get_all_values() if r and r[0]}
-    for k, v in nilai.items():
-        if k in ("Gudang", "Area Display", "Jumlah", "Produk display sisa MINUS",
-                 "Nilai display minus", "Produk gudang sisa MINUS", "Baris saldo tanpa harga"):
-            print(f"   {k:34} = {v}", flush=True)
 
     def angka(teks):
         t = str(teks).replace("Rp", "").replace(" ", "").replace(".", "").replace(",", ".")
@@ -234,28 +224,28 @@ def uji_dengan_data_palsu(sh, ws):
         ("Produk display sisa MINUS", 2),
         ("Nilai display minus", -21000),
         ("Produk gudang sisa MINUS", 1),
-        ("Baris saldo tanpa harga", 1),
+        ("Baris stok tanpa harga", 1),
     ]
     for label, harus in cek:
         dapat = angka(nilai.get(label, ""))
+        print(f"   {label:34} = {nilai.get(label, '')}", flush=True)
         if dapat != harus:
             gagal.append(f"{label}: dapat {dapat}, harusnya {harus}")
 
-    blok = ws.get("D1:G8")
-    print(f"   blok PER LOKASI {len(blok)} baris:", flush=True)
+    blok = ws.get("I1:K8")
+    print(f"   blok NILAI STOK PER LOKASI {len(blok)} baris:", flush=True)
     for r in blok[:5]:
         print("     ", r, flush=True)
     if not any("Gudang Ciherang" in str(r) for r in blok):
-        gagal.append("blok PER LOKASI tidak memuat Gudang Ciherang")
+        gagal.append("blok NILAI STOK PER LOKASI tidak memuat Gudang Ciherang")
 
-    print("   memulihkan Stok Gudang & Stok Display dari data asli...", flush=True)
-    for skrip in ("hitung_saldo.py", "saldo_display.py"):
-        r = subprocess.run([sys.executable, "-u", str(Path(__file__).parent / skrip)],
-                           capture_output=True, text=True, timeout=300)
-        if r.returncode != 0:
-            gagal.append(f"pemulihan {skrip} GAGAL: {r.stderr[-300:]}")
-        else:
-            print(f"     {skrip} dijalankan ulang", flush=True)
+    print("   memulihkan tab Stok dari data asli...", flush=True)
+    r = subprocess.run([sys.executable, "-u", str(Path(__file__).parent / "hitung_stok.py")],
+                       capture_output=True, text=True, timeout=300)
+    if r.returncode != 0:
+        gagal.append(f"pemulihan hitung_stok.py GAGAL: {r.stderr[-300:]}")
+    else:
+        print("     hitung_stok.py dijalankan ulang", flush=True)
     return gagal
 
 
@@ -281,7 +271,7 @@ def jalan(pakai_uji):
     print("Tidak ada galat formula.", flush=True)
 
     if pakai_uji:
-        print("\nUji dengan data palsu di dua tab saldo (Log tidak disentuh):", flush=True)
+        print("\nUji dengan data palsu di tab Stok (Log tidak disentuh):", flush=True)
         gagal = uji_dengan_data_palsu(sh, ws)
         if gagal:
             print("\nGAGAL:", flush=True)

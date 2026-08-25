@@ -98,8 +98,8 @@ jadi tidak mengganggu apa pun kalau menganggur.
 
 | Lokasi | Rumus | Butuh Olsera | Skrip | Tab |
 |---|---|---|---|---|
-| Gudang | SO terakhir + datang + masuk − keluar | tidak | `scripts/hitung_saldo.py` | Stok Gudang |
-| Area Display | SO terakhir + isi ulang − keluar − penjualan | ya | `scripts/saldo_display.py` | Stok Display |
+| Gudang | SO terakhir + datang + masuk − keluar | tidak | `scripts/hitung_stok.py` | Stok |
+| Area Display | SO terakhir + isi ulang − keluar − penjualan | ya | `scripts/hitung_stok.py` | Stok |
 | Pemeriksa | gudang + display = stok Olsera | ya | belum ada | — |
 
 Semua skrip punya `--uji` yang jalan tanpa jaringan dan ikut dijalankan otomatis
@@ -108,8 +108,8 @@ sebelum menulis sheet, jadi sheet tak pernah ditulis dengan logika rusak.
 Urutan jalannya untuk display:
 
 ```
-export Olsera  ->  peta_satuan.py  ->  import_penjualan.py  ->  saldo_display.py
-                   (tab Peta Satuan)   (tab Penjualan)          (tab Stok Display)
+export POS  ->  peta_satuan.py  ->  import_penjualan.py  ->  hitung_stok.py
+                (tab Peta Satuan)   (tab Penjualan)          (tab Stok)
 ```
 
 Sumber penjualan: export Olsera **Qty Produk Terjual** (rentang tanggal bebas),
@@ -119,8 +119,8 @@ yang sudah ditangani, semuanya dengan cara MELAPORKAN, bukan menebak:
 1. `sales qty` per varian, bukan satuan dasar — 9 "Box (12 pcs)" = 108 Pcs.
    Konversinya lewat kolom Isi di tab Peta Satuan Olsera.
 2. Sebagian baris `sku`-nya kosong (Almond Slice, Alu Cup, Alu Tray) — dicocokkan
-   lewat nama + varian, dan yang tetap tidak ketemu masuk tab **Penjualan Tak
-   Cocok** lengkap dengan omzetnya. Kalau dibuang diam-diam, saldo display
+   lewat nama + varian, dan yang tetap tidak ketemu tetap ditulis ke tab
+   **Penjualan** dengan kolom **Sebab** terisi. Kalau dibuang diam-diam, saldo display
    kelihatan lebih banyak dari kenyataan dan tak ada yang tahu sebabnya.
 3. Export per rentang, bukan per hari. Rentang yang **melintasi** hari SO display
    (mulai sebelum, berakhir sesudah) tidak dihitung sama sekali — sebagiannya
@@ -132,6 +132,8 @@ yang sudah ditangani, semuanya dengan cara MELAPORKAN, bukan menebak:
 Sisa display **boleh minus** dan minus itu sinyal, bukan bug: ada barang laku yang
 isi ulangnya tidak pernah dicatat. Jangan pernah dipaksa jadi 0.
 
-Yang belum digarap: tab Pemeriksa (`gudang + display` lawan stok Olsera) dan
-daftar "Isi Ulang Hari Ini". Keduanya menunggu Area Display benar-benar di-SO
-sekali — sebelum itu tidak ada titik awal untuk dibandingkan.
+Selisih antara perkiraan dan hitungan fisik ada di tab **Selisih SO**
+(`scripts/selisih_so.py`).
+
+Yang belum digarap: tab Pemeriksa (`gudang + display` lawan stok POS) dan daftar
+"Isi Ulang Hari Ini" — keduanya menunggu POS baru.

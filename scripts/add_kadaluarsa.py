@@ -4,8 +4,8 @@
     python3 -u add_kadaluarsa.py            # pasang / perbarui tab Kadaluarsa
     python3 -u add_kadaluarsa.py --uji      # uji formula di tab sementara, lalu dihapus
 
-Aman diulang. TIDAK menyentuh Log, `Rekap!G1`, maupun tab lain — cuma menulis
-judul + formula di tab Kadaluarsa.
+Aman diulang. TIDAK menyentuh Log maupun tab lain — cuma menulis judul + formula
+di tab Kadaluarsa.
 
 Kenapa formula dan bukan skrip yang menulis angka: kolom ED sudah ada di Log dan
 tidak butuh perbandingan waktu rumit seperti saldo, jadi QUERY biasa cukup. Dengan

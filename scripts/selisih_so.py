@@ -39,6 +39,12 @@ from collections import defaultdict
 import harga_lookup
 
 TAB = "Selisih SO"
+# Sama seperti tab Stok: baris 1 memperingatkan sendiri kalau angkanya sudah lewat
+# sehari. Stempel berupa teks di kolom jauh di kanan tidak pernah dibaca siapa pun.
+PENANDA = ('=IF($B$1="";"belum pernah dihitung";'
+           'IF(TODAY()-INT($B$1)>=1;'
+           '"⚠ ANGKA LAMA — dihitung "&TEXT($B$1;"d mmm HH:mm")&", jalankan ulang hitung saldo";'
+           '"✓ Terbaru — dihitung "&TEXT($B$1;"d mmm HH:mm")))')
 JUDUL = ["Tgl SO", "Lokasi", "SKU", "Produk", "Satuan", "Perkiraan", "Hasil Hitung",
          "Selisih", "HPP", "Nilai Selisih", "Dasar"]
 
@@ -239,15 +245,17 @@ def tulis_sheet():
         ws = sh.add_worksheet(TAB, rows=20000, cols=len(JUDUL) + 2)
 
     stempel = time.strftime("%Y-%m-%d %H:%M:%S")
+    # Baris 1 penanda, baris 2 judul, data mulai baris 3 -- sama dengan tab Stok.
+    ws.update(values=[[PENANDA, stempel]], range_name="A1", value_input_option="USER_ENTERED")
     ws.update(values=[JUDUL] + (baris or [["(semua cocok)"] + [""] * (len(JUDUL) - 1)]),
-              range_name="A1")
-    ws.format("A1:K1", {"textFormat": {"bold": True}})
-    ws.freeze(rows=1)
+              range_name="A2")
+    ws.format("A2:K2", {"textFormat": {"bold": True}})
+    ws.format("A1", {"textFormat": {"bold": True}})
+    ws.freeze(rows=2)
 
     kurang = sum(b[9] for b in baris if b[9] != "" and b[9] < 0)
     lebih = sum(b[9] for b in baris if b[9] != "" and b[9] > 0)
     ws.update(values=[
-        [f"Dihitung {stempel} WIB — jalankan ulang scripts/selisih_so.py untuk angka terbaru"],
         [f"{cocok} produk cocok, {len(baris)} selisih"],
         [f"Nilai barang kurang Rp {abs(kurang):,.0f}".replace(",", ".")],
         [f"Nilai barang lebih Rp {lebih:,.0f}".replace(",", ".")],

@@ -6,10 +6,10 @@
 
 Alurnya:
 
-    export Olsera  ->  Peta Satuan Olsera  ->  tab Penjualan  ->  saldo display
+    export POS  ->  Peta Satuan Olsera  ->  tab Penjualan  ->  sisa Area Display
 
-Yang TIDAK ketemu petanya masuk tab 'Penjualan Tak Cocok' lengkap dengan qty dan
-omzetnya -- jangan pernah dibuang diam-diam. Kalau dibuang, saldo display kelihatan
+Yang TIDAK ketemu petanya tetap ditulis ke tab 'Penjualan' dengan kolom Sebab
+terisi -- jangan pernah dibuang diam-diam. Kalau dibuang, saldo display kelihatan
 lebih banyak daripada kenyataan, dan tidak ada yang tahu sebabnya.
 
 Periode dibaca dari nama berkas Olsera, mis.
@@ -26,9 +26,16 @@ import sys
 import warnings
 
 TAB_JUAL = "Penjualan"
-TAB_GAGAL = "Penjualan Tak Cocok"
-JUDUL_JUAL = ["Awal", "Akhir", "Produk Master", "Satuan Dasar", "Qty Dasar"]
-JUDUL_GAGAL = ["Awal", "Akhir", "Produk Olsera", "Varian Olsera", "Qty Olsera", "Omzet", "Sebab"]
+# Satu tab, bukan dua. Baris yang gagal dikonversi TIDAK dipindah ke tab sendiri
+# melainkan ikut di sini dengan kolom Sebab terisi -- tujuannya justru supaya
+# kelihatan. Tab terpisah yang tidak pernah dibuka sama saja dengan dibuang, dan
+# penjualan yang hilang diam-diam bikin sisa display kelihatan lebih banyak
+# daripada kenyataan.
+#
+# Baris yang berhasil: Sebab kosong, Qty Dasar terisi.
+# Baris yang gagal   : Sebab terisi, Qty Dasar kosong (Produk = nama dari Olsera).
+JUDUL_JUAL = ["Awal", "Akhir", "Produk", "Varian", "Satuan Dasar", "Qty Dasar",
+              "Qty Olsera", "Omzet", "Sebab"]
 
 
 # --- Bagian murni ----------------------------------------------------------
@@ -60,7 +67,7 @@ def konversi(penjualan, peta, awal, akhir):
         kunci = peta.get((po, vo))
 
         if not kunci or kunci[2] in ("", None):
-            gagal.append([awal, akhir, po, vo, _rapi(qty), _rapi(r.get("omzet", 0)),
+            gagal.append([awal, akhir, po, vo, "", "", _rapi(qty), _rapi(r.get("omzet", 0)),
                           "belum ada di Peta Satuan Olsera" if not kunci else "kolom Isi masih kosong"])
             continue
 
@@ -68,18 +75,19 @@ def konversi(penjualan, peta, awal, akhir):
         try:
             isi = float(str(isi).replace(",", "."))
         except ValueError:
-            gagal.append([awal, akhir, po, vo, _rapi(qty), _rapi(r.get("omzet", 0)),
+            gagal.append([awal, akhir, po, vo, "", "", _rapi(qty), _rapi(r.get("omzet", 0)),
                           f"kolom Isi bukan angka: {isi!r}"])
             continue
         if isi <= 0:
-            gagal.append([awal, akhir, po, vo, _rapi(qty), _rapi(r.get("omzet", 0)),
+            gagal.append([awal, akhir, po, vo, "", "", _rapi(qty), _rapi(r.get("omzet", 0)),
                           f"kolom Isi harus lebih dari 0, terbaca {isi}"])
             continue
 
         total[produk_master] += qty * isi
         satuan.setdefault(produk_master, satuan_dasar)
 
-    baris = [[awal, akhir, p, satuan.get(p, ""), _rapi(q)] for p, q in sorted(total.items())]
+    baris = [[awal, akhir, p, "", satuan.get(p, ""), _rapi(q), "", "", ""]
+             for p, q in sorted(total.items())]
     return baris, gagal
 
 
@@ -120,11 +128,11 @@ def uji():
 
     per = {b[2]: b for b in baris}
     # 9 karton x 12 + 4 pcs = 112, DUA baris varian digabung jadi satu produk.
-    assert per["Fresh Milk Greenfields 1L"][4] == 112, f"konversi satuan salah: {per}"
-    assert per["Fresh Milk Greenfields 1L"][3] == "Pcs"
+    assert per["Fresh Milk Greenfields 1L"][5] == 112, f"konversi satuan salah: {per}"
+    assert per["Fresh Milk Greenfields 1L"][4] == "Pcs"
     assert len(baris) == 1, f"produk yang gagal tidak boleh ikut: {baris}"
 
-    sebab = {g[2]: g[6] for g in gagal}
+    sebab = {g[2]: g[8] for g in gagal}
     assert sebab["Botol SKLB 250ml"] == "kolom Isi masih kosong", sebab
     assert sebab["Barang Asing"] == "belum ada di Peta Satuan Olsera", sebab
     assert "bukan angka" in sebab["Rusak"], sebab
@@ -200,19 +208,19 @@ def jalan(path):
 
     baris, gagal = konversi(jual, peta, awal, akhir)
 
-    lama = _tulis(_tab(sh, TAB_JUAL, 5), JUDUL_JUAL, baris, awal, akhir)
-    _tulis(_tab(sh, TAB_GAGAL, 7), JUDUL_GAGAL, gagal, awal, akhir)
+    # Yang gagal ditaruh DI ATAS yang berhasil supaya langsung kelihatan.
+    lama = _tulis(_tab(sh, TAB_JUAL, len(JUDUL_JUAL)), JUDUL_JUAL, gagal + baris, awal, akhir)
 
-    omzet_gagal = sum(float(g[5] or 0) for g in gagal)
+    omzet_gagal = sum(float(g[7] or 0) for g in gagal)
     omzet_total = sum(float(r["omzet"]) for r in jual)
     print(f"\nTab '{TAB_JUAL}' : {len(baris)} produk untuk periode ini "
           f"({lama} baris periode lain dipertahankan)", flush=True)
-    print(f"Tab '{TAB_GAGAL}': {len(gagal)} baris "
-          f"= {omzet_gagal/omzet_total*100:.1f}% dari omzet belum tercakup", flush=True)
+    print(f"   di antaranya {len(gagal)} baris BELUM TERCAKUP "
+          f"= {omzet_gagal/omzet_total*100:.1f}% dari omzet", flush=True)
     if gagal:
         print("\n5 yang paling berharga untuk dipetakan berikutnya:", flush=True)
-        for g in sorted(gagal, key=lambda x: -float(x[5] or 0))[:5]:
-            print(f"   Rp{float(g[5]):>12,.0f}  {g[2][:38]:38} | {g[3][:18]:18} | {g[6]}", flush=True)
+        for g in sorted(gagal, key=lambda x: -float(x[7] or 0))[:5]:
+            print(f"   Rp{float(g[7]):>12,.0f}  {g[2][:38]:38} | {g[3][:18]:18} | {g[8]}", flush=True)
     return 0
 
 

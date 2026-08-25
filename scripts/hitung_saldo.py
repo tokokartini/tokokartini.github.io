@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Hitung sisa stok per gudang, tulis ke tab 'Stok Gudang'.
+"""Hitung sisa stok per gudang. Hasilnya masuk tab 'Stok'.
 
-    python3 -u hitung_saldo.py            # baca sheet, tulis tab Stok Gudang
-    python3 -u hitung_saldo.py --uji      # jalankan uji fungsi hitung, tanpa jaringan
+    python3 -u hitung_saldo.py --uji      # jalankan uji fungsi hitung
+
+Bukan skrip penulis sheet lagi — lihat hitung_stok.py.
 
 Rumusnya:
 
@@ -13,20 +14,15 @@ dari gudang kalau ada orang memindahkannya, dan itu justru yang dicatat halaman
 Pengeluaran. Beda dengan Area Display yang berkurang tiap ada yang laku -- display
 sengaja tidak dihitung di sini, lihat catatan di docs/LANGKAH-MUTASI.md.
 
-Hasilnya ditulis sebagai ANGKA BIASA, bukan formula. Rekap per hari sudah dipegang
-tab Rekap Mutasi; yang ini butuh membandingkan waktu SO per lokasi dengan waktu tiap
+Hasilnya ditulis sebagai ANGKA BIASA, bukan formula: ini butuh membandingkan
+waktu SO per lokasi dengan waktu tiap
 mutasi, dan QUERY sheet tidak bisa melakukannya tanpa jadi rumus raksasa yang tak
 bisa diuji. Jalankan ulang skrip ini tiap kali mau angka terbaru.
 """
 import argparse
-import os
-import socket
 import sys
-import time
-import warnings
 from collections import defaultdict
 
-import arsip_saldo
 import harga_lookup
 
 # --- Bagian murni: bisa diuji tanpa jaringan -------------------------------
@@ -192,95 +188,20 @@ def uji():
     print("semua uji hitung_saldo LOLOS")
 
 
-# --- Bagian yang menyentuh jaringan ----------------------------------------
-
-def tulis_sheet():
-    import gspread
-    from google.oauth2.service_account import Credentials
-
-    # Bisa ditimpa lewat env SO_KEY_PATH supaya skrip yang sama bisa jalan di
-    # GitHub Actions, di mana kunci ditulis ke berkas sementara.
-    KEY_PATH = os.environ.get(
-        "SO_KEY_PATH", "/home/pianqt/Documents/Claude AI/claude-code-powershel-1427d99324cd.json")
-    SHEET_ID = "1uP2ntR00nrstLXKTuCYw1IzWDKohQAKsaq3qeeApDgw"
-
-    creds = Credentials.from_service_account_file(
-        KEY_PATH, scopes=["https://www.googleapis.com/auth/spreadsheets"]
-    )
-    sh = gspread.authorize(creds).open_by_key(SHEET_ID)
-
-    log = sh.worksheet("Log").get_all_values()[1:]
-    mutasi = sh.worksheet("Mutasi").get_all_values()[1:]
-    try:
-        harga = sh.worksheet("Harga").get_all_values()[1:]
-    except gspread.exceptions.WorksheetNotFound:
-        harga = []
-        print("Tab 'Harga' belum ada — kolom HPP/Nilai dikosongkan. "
-              "Jalankan scripts/harga_master.py.", flush=True)
-    print(f"Log {len(log)} baris, Mutasi {len(mutasi)} baris, Harga {len(harga)} baris",
-          flush=True)
-
-    # Daftar lokasi diambil dari yang benar-benar muncul di data, bukan daftar tetap
-    # di kode -- lokasi baru di tabel racks langsung ikut tanpa mengubah skrip.
-    lokasi = {_kolom(r, 2) for r in log if _kolom(r, 2)}
-    lokasi |= {_kolom(r, 3) for r in mutasi} | {_kolom(r, 4) for r in mutasi}
-    lokasi -= MAYA | {DISPLAY, ""}
-
-    baris = hitung_saldo(log, mutasi, lokasi, harga)
-    print(f"{len(baris)} baris saldo di {len(lokasi)} lokasi", flush=True)
-
-    judul = ["Lokasi", "SKU", "Produk", "Satuan", "Hasil SO", "Tgl SO", "Masuk", "Keluar",
-             "Sisa", "HPP", "Nilai Sisa"]
-    # 13 kolom: 11 untuk tabel + kolom M untuk stempel waktu hitung.
-    try:
-        ws = sh.worksheet("Stok Gudang")
-        ws.clear()
-        if ws.col_count < 13:
-            ws.resize(rows=max(ws.row_count, 20000), cols=13)
-    except gspread.exceptions.WorksheetNotFound:
-        ws = sh.add_worksheet("Stok Gudang", rows=20000, cols=13)
-
-    stempel = time.strftime("%Y-%m-%d %H:%M:%S")
-    ws.update(values=[judul] + (baris or [["(belum ada data)"] + [""] * (len(judul) - 1)]),
-              range_name="A1")
-    ws.format("A1:K1", {"textFormat": {"bold": True}})
-    ws.freeze(rows=1)
-    total = sum(b[10] for b in baris if b[10] != "")
-    tanpa = sum(1 for b in baris if b[10] == "")
-    ws.update(values=[[f"Dihitung {stempel} WIB — jalankan ulang scripts/hitung_saldo.py untuk angka terbaru"],
-                      [f"Nilai stok gudang Rp {total:,.0f}".replace(",", ".")],
-                      [f"{tanpa} baris tanpa harga (jalankan scripts/harga_master.py kalau master berubah)"]],
-              range_name="M1")
-    print(f"Nilai stok gudang Rp {total:,.0f}, {tanpa} baris tanpa harga", flush=True)
-    print(f"Tab 'Stok Gudang' ditulis ulang, {len(baris)} baris, stempel {stempel}", flush=True)
-
-    # Potret harian: Stok Gudang ditimpa tiap jalan, arsip yang menyimpan riwayatnya.
-    baru, lama_tetap = arsip_saldo.simpan(
-        sh, stempel[:10], lokasi,
-        [[b[0], b[1], b[2], b[3], b[8], b[9], b[10]] for b in baris])
-    print(f"Arsip Saldo: {baru} baris potret hari ini, {lama_tetap} baris lama dipertahankan",
-          flush=True)
-
-    for b in baris[:5]:
-        print("   ", b, flush=True)
-
+# --- Tidak lagi menulis sheet -----------------------------------------------
+#
+# Berkas ini sekarang MODUL MURNI. Yang menulis tab Stok adalah `hitung_stok.py`,
+# yang memanggil fungsi hitung di atas untuk gudang lalu menggabungkannya dengan
+# sisi satunya jadi satu tabel. Dulu tiap sisi punya tab dan skripnya sendiri, dan
+# itu bisa setengah terbarui: satu sisi hari ini, satu sisi kemarin.
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--uji", action="store_true", help="jalankan uji fungsi hitung, tanpa jaringan")
-    args = ap.parse_args()
-
-    if args.uji:
-        uji()
-        return
-
-    warnings.filterwarnings("ignore", category=DeprecationWarning)
-    # IPv6 ke Google menggantung di jaringan toko -- paksa IPv4.
-    asli = socket.getaddrinfo
-    socket.getaddrinfo = lambda h, p, f=0, t=0, pr=0, fl=0: asli(h, p, socket.AF_INET, t, pr, fl)
-
-    uji()  # pengaman: jangan pernah menulis sheet dengan logika yang rusak
-    tulis_sheet()
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--uji", action="store_true", help="jalankan uji hitung, tanpa jaringan")
+    ap.parse_args()
+    uji()
+    print("Modul murni — untuk menulis sheet jalankan: python3 -u hitung_stok.py")
+    return 0
 
 
 if __name__ == "__main__":

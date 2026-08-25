@@ -13,9 +13,9 @@ Yang dihapus, semuanya HANYA yang waktunya jatuh pada tanggal yang disebut:
 - baris tab **Log** dan tab **Mutasi**
 - baris tabel `count_entries` dan `movements` di Supabase
 
-Tab olahan (Rekap, Arsip Harian, Kadaluarsa, dst.) tidak perlu disentuh — semuanya
-formula di atas Log, jadi ikut bersih sendiri. Tab Stok Gudang / Stok Display /
-Arsip Saldo ditulis ulang waktu skrip saldo dijalankan lagi.
+Tab olahan (Arsip Harian, Kadaluarsa, Barang Rusak, Ringkasan) tidak perlu
+disentuh — semuanya formula di atas Log dan Mutasi, jadi ikut bersih sendiri. Tab
+Stok dan Selisih SO ditulis ulang waktu skripnya dijalankan lagi.
 
 ## Dua pengaman
 
@@ -134,9 +134,9 @@ def jalan(tanggal, tulis):
         else:
             print(f"Tabel {tabel}: {n} baris dihapus", flush=True)
 
-    print("\nSelesai. Jalankan ulang skrip saldo supaya tab Stok Gudang / Stok Display /\n"
-          "Arsip Saldo ikut bersih:\n"
-          "   python3 -u hitung_saldo.py && python3 -u saldo_display.py", flush=True)
+    print("\nSelesai. Jalankan ulang skrip stok supaya tab Stok dan Selisih SO\n"
+          "ikut bersih:\n"
+          "   python3 -u hitung_stok.py && python3 -u selisih_so.py", flush=True)
     return 0
 
 

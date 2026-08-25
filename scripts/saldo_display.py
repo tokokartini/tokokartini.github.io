@@ -1,8 +1,9 @@
 # -*- coding: utf-8 -*-
-"""Hitung sisa stok Area Display, tulis ke tab 'Stok Display'.
+"""Hitung sisa stok Area Display. Hasilnya masuk tab 'Stok'.
 
-    python3 -u saldo_display.py            # baca sheet, tulis tab Stok Display
-    python3 -u saldo_display.py --uji      # jalankan uji fungsi hitung, tanpa jaringan
+    python3 -u saldo_display.py --uji      # jalankan uji fungsi hitung
+
+Bukan skrip penulis sheet lagi — lihat hitung_stok.py.
 
 Rumusnya:
 
@@ -34,18 +35,12 @@ dikerjakan QUERY sheet tanpa jadi rumus raksasa yang tak bisa diuji. Jalankan ul
 skrip ini tiap kali mau angka terbaru.
 """
 import argparse
-import os
-import socket
 import sys
-import time
-import warnings
 from collections import defaultdict
 
-import arsip_saldo
 import harga_lookup
 
 DISPLAY = "Area Display"
-TAB = "Stok Display"
 JUDUL = ["Produk", "SKU", "Satuan", "Hasil SO", "Tgl SO",
          "Isi Ulang", "Keluar", "Terjual", "Sisa",
          "HPP", "Nilai Sisa", "Nilai Terjual (HPP)", "Catatan"]
@@ -58,7 +53,11 @@ def hitung_display(log_rows, mutasi_rows, jual_rows, harga_rows=()):
 
     log_rows    : tab Log tanpa judul     -> [Waktu, Staff, Rak, Produk, Rincian, Qty, Satuan, ED, SKU]
     mutasi_rows : tab Mutasi tanpa judul  -> [Waktu, Staff, Jenis, Dari, Ke, Produk, Rincian, Qty, Satuan, SKU, Nota]
-    jual_rows   : tab Penjualan tanpa judul -> [Awal, Akhir, Produk Master, Satuan Dasar, Qty Dasar]
+    jual_rows   : tab Penjualan tanpa judul ->
+                  [Awal, Akhir, Produk, Varian, Satuan Dasar, Qty Dasar, Qty Olsera, Omzet, Sebab]
+                  Baris yang kolom Sebab-nya terisi adalah penjualan yang GAGAL
+                  dikonversi ke satuan dasar. Dilewat di sini -- angkanya belum bisa
+                  dipercaya -- tapi sengaja tetap ada di tab itu supaya kelihatan.
     harga_rows  : tab Harga tanpa judul, untuk kolom HPP + nilai. Kosong = kolom
                   nilai ikut kosong, hitungan qty tetap jalan.
 
@@ -115,14 +114,16 @@ def hitung_display(log_rows, mutasi_rows, jual_rows, harga_rows=()):
         awal, akhir, produk = _kolom(r, 0), _kolom(r, 1), _kolom(r, 2)
         if not produk or not awal:
             continue
-        satuan.setdefault(produk, _kolom(r, 3))
+        if _kolom(r, 8):
+            continue          # ada Sebab = gagal dikonversi, jangan dihitung
+        satuan.setdefault(produk, _kolom(r, 4))
         if tgl_so:
             if akhir < tgl_so:
                 continue                       # seluruhnya sebelum SO, sudah tercermin
             if awal <= tgl_so:
                 lintas.add((awal, akhir))      # melintasi hari SO, tidak bisa dipisah
                 continue
-        terjual[produk] += _angka(_kolom(r, 4))
+        terjual[produk] += _angka(_kolom(r, 5))
 
     produk_lintas = {_kolom(r, 2) for r in jual_rows
                      if (_kolom(r, 0), _kolom(r, 1)) in lintas and _kolom(r, 2)}
@@ -208,9 +209,12 @@ def uji():
         ["2026-08-12 08:00:00", "rian", "Pindah", "Gudang Dapur Cherry", "Gudang Ciherang", "Ceres", "", "77", "Pcs", "CRS", ""],
     ]
     jual = [
-        ["2026-06-15", "2026-06-21", "Gula", "Pack", "100"],      # seluruhnya sebelum SO -> abaikan
-        ["2026-08-11", "2026-08-17", "Gula", "Pack", "12"],       # sesudah SO -> dihitung
-        ["2026-08-11", "2026-08-17", "Kopi Saset", "Pcs", "8"],   # laku tapi tak pernah di-SO
+        ["2026-06-15", "2026-06-21", "Gula", "", "Pack", "100", "", "", ""],   # sebelum SO -> abaikan
+        ["2026-08-11", "2026-08-17", "Gula", "", "Pack", "12", "", "", ""],    # sesudah SO -> dihitung
+        ["2026-08-11", "2026-08-17", "Kopi Saset", "", "Pcs", "8", "", "", ""],  # laku tapi tak pernah di-SO
+        # Baris gagal konversi: HARUS dilewat, kalau ikut terhitung sisa display salah.
+        ["2026-08-11", "2026-08-17", "Gula", "Carton (80pcs)", "", "", "2", "50000",
+         "kolom Isi masih kosong"],
     ]
     baris, peringatan = hitung_display(log, mutasi, jual)
     per = {b[0]: b for b in baris}
@@ -233,7 +237,7 @@ def uji():
 
     # Rentang yang melintasi hari SO tidak boleh ikut, tapi WAJIB dilaporkan.
     baris2, peringatan2 = hitung_display(
-        log, mutasi, [["2026-08-08", "2026-08-14", "Gula", "Pack", "50"]])
+        log, mutasi, [["2026-08-08", "2026-08-14", "Gula", "", "Pack", "50", "", "", ""]])
     g2 = {b[0]: b for b in baris2}["Gula"]
     assert g2[7] == 0, f"rentang melintas tidak boleh dihitung: {g2}"
     assert "melintasi hari SO" in g2[12], f"catatan baris hilang: {g2}"
@@ -266,99 +270,20 @@ def uji():
     print("semua uji hitung_display LOLOS")
 
 
-# --- Bagian yang menyentuh jaringan ----------------------------------------
-
-# Bisa ditimpa lewat env SO_KEY_PATH supaya skrip yang sama bisa jalan di
-# GitHub Actions, di mana kunci ditulis ke berkas sementara.
-KEY_PATH = os.environ.get(
-    "SO_KEY_PATH", "/home/pianqt/Documents/Claude AI/claude-code-powershel-1427d99324cd.json")
-SHEET_ID = "1uP2ntR00nrstLXKTuCYw1IzWDKohQAKsaq3qeeApDgw"
-
-
-def tulis_sheet():
-    import gspread
-    from google.oauth2.service_account import Credentials
-
-    creds = Credentials.from_service_account_file(
-        KEY_PATH, scopes=["https://www.googleapis.com/auth/spreadsheets"]
-    )
-    sh = gspread.authorize(creds).open_by_key(SHEET_ID)
-
-    log = sh.worksheet("Log").get_all_values()[1:]
-    mutasi = sh.worksheet("Mutasi").get_all_values()[1:]
-    try:
-        harga = sh.worksheet("Harga").get_all_values()[1:]
-    except gspread.exceptions.WorksheetNotFound:
-        harga = []
-        print("Tab 'Harga' belum ada — kolom HPP/Nilai dikosongkan. "
-              "Jalankan scripts/harga_master.py.", flush=True)
-    try:
-        jual = sh.worksheet("Penjualan").get_all_values()[1:]
-    except gspread.exceptions.WorksheetNotFound:
-        print("Tab 'Penjualan' belum ada. Jalankan dulu:\n"
-              '  python3 -u import_penjualan.py "<export Olsera.xlsx>"', flush=True)
-        return 1
-    print(f"Log {len(log)} baris, Mutasi {len(mutasi)} baris, "
-          f"Penjualan {len(jual)} baris, Harga {len(harga)} baris", flush=True)
-
-    baris, peringatan = hitung_display(log, mutasi, jual, harga)
-    print(f"{len(baris)} produk di Area Display", flush=True)
-
-    try:
-        ws = sh.worksheet(TAB)
-        ws.clear()
-        if ws.col_count < len(JUDUL) + 3:
-            ws.resize(rows=max(ws.row_count, 20000), cols=len(JUDUL) + 3)
-    except gspread.exceptions.WorksheetNotFound:
-        ws = sh.add_worksheet(TAB, rows=20000, cols=len(JUDUL) + 3)
-
-    stempel = time.strftime("%Y-%m-%d %H:%M:%S")
-    ws.update(values=[JUDUL] + (baris or [["(belum ada data)"] + [""] * (len(JUDUL) - 1)]),
-              range_name="A1")
-    ws.format("A1:M1", {"textFormat": {"bold": True}})
-    ws.freeze(rows=1)
-
-    total = sum(b[10] for b in baris if b[10] != "")
-    tanpa = sum(1 for b in baris if b[9] == "")
-    catatan = [f"Dihitung {stempel} WIB — jalankan ulang scripts/saldo_display.py untuk angka terbaru",
-               f"Nilai stok display Rp {total:,.0f}".replace(",", "."),
-               f"{tanpa} baris tanpa harga (jalankan scripts/harga_master.py kalau master berubah)"]
-    catatan += peringatan
-    ws.update(values=[[c] for c in catatan], range_name="O1")
-    print(f"Nilai stok display Rp {total:,.0f}, {tanpa} baris tanpa harga", flush=True)
-
-    print(f"Tab '{TAB}' ditulis ulang, {len(baris)} baris, stempel {stempel}", flush=True)
-
-    # Potret harian, sama seperti gudang. Lokasi yang ditulis cuma Area Display,
-    # jadi baris gudang milik hitung_saldo.py tidak ikut tersapu.
-    baru, lama_tetap = arsip_saldo.simpan(
-        sh, stempel[:10], {DISPLAY},
-        [[DISPLAY, b[1], b[0], b[2], b[8], b[9], b[10]] for b in baris])
-    print(f"Arsip Saldo: {baru} baris potret hari ini, {lama_tetap} baris lama dipertahankan",
-          flush=True)
-    for p in peringatan:
-        print("  PERHATIAN:", p, flush=True)
-    for b in baris[:5]:
-        print("   ", b, flush=True)
-    return 0
-
+# --- Tidak lagi menulis sheet -----------------------------------------------
+#
+# Berkas ini sekarang MODUL MURNI. Yang menulis tab Stok adalah `hitung_stok.py`,
+# yang memanggil fungsi hitung di atas untuk Area Display lalu menggabungkannya dengan
+# sisi satunya jadi satu tabel. Dulu tiap sisi punya tab dan skripnya sendiri, dan
+# itu bisa setengah terbarui: satu sisi hari ini, satu sisi kemarin.
 
 def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--uji", action="store_true", help="jalankan uji fungsi hitung, tanpa jaringan")
-    args = ap.parse_args()
-
-    if args.uji:
-        uji()
-        return 0
-
-    warnings.filterwarnings("ignore", category=DeprecationWarning)
-    # IPv6 ke Google menggantung di jaringan toko -- paksa IPv4.
-    asli = socket.getaddrinfo
-    socket.getaddrinfo = lambda h, p, f=0, t=0, pr=0, fl=0: asli(h, p, socket.AF_INET, t, pr, fl)
-
-    uji()  # pengaman: jangan pernah menulis sheet dengan logika yang rusak
-    return tulis_sheet()
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--uji", action="store_true", help="jalankan uji hitung, tanpa jaringan")
+    ap.parse_args()
+    uji()
+    print("Modul murni — untuk menulis sheet jalankan: python3 -u hitung_stok.py")
+    return 0
 
 
 if __name__ == "__main__":

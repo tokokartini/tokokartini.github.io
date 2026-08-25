@@ -1,16 +1,17 @@
 # -*- coding: utf-8 -*-
-"""Pencari HPP dari tab 'Harga'. Dipakai hitung_saldo.py dan saldo_display.py.
+"""Pencari HPP dari tab 'Harga'. Dipakai hitung_saldo.py, saldo_display.py,
+dan selisih_so.py.
 
-Dipisah jadi modul sendiri supaya dua skrip saldo memakai aturan pencarian yang
-persis sama — kalau salah satunya menghitung nilai dengan cara berbeda, angka
-gudang dan angka display tidak bisa dijumlahkan dan tab Pemeriksa nanti salah.
+Dipisah jadi modul sendiri supaya semuanya memakai aturan pencarian yang persis
+sama — kalau salah satu menghitung nilai dengan cara berbeda, angka gudang dan
+angka display tidak bisa dijumlahkan dan angka selisih ikut salah.
 
 Dua jalan cari, berurutan:
 
 1. **Lewat SKU** — paling tepat, satu SKU satu harga.
 2. **Lewat (nama produk, satuan)** — untuk baris yang tidak punya SKU. Tab
-   Penjualan cuma menyimpan nama produk, jadi seluruh tab Stok Display bisa saja
-   tanpa SKU sampai produknya pernah ikut SO atau mutasi.
+   Penjualan cuma menyimpan nama produk, jadi baris Area Display di tab Stok bisa
+   saja tanpa SKU sampai produknya pernah ikut SO atau mutasi.
 
 Kalau satu (produk, satuan) ternyata punya DUA HPP berbeda, harganya dianggap
 tidak bisa dipastikan dan baris itu dibiarkan kosong, bukan diambil salah satu.

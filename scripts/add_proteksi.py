@@ -16,9 +16,9 @@ dari sheet miliknya atau menghalangi skrip yang memang harus menulis ke tab-tab
 itu. Peringatan sudah cukup untuk bahaya yang sebenarnya — orang tidak sengaja
 mengetik di sel yang salah — tanpa bisa membuat siapa pun terkunci.
 
-`Rekap!G1` SENGAJA dibiarkan bebas: itu kotak tanggal yang memang harus diisi.
-Tab Log tidak diproteksi selain baris judulnya; badan Log ditulis Edge Function
-`upload-rak` dan tidak boleh ada apa pun yang menghalanginya.
+`Cari Barang!B1` SENGAJA dibiarkan bebas: itu kotak pencarian yang memang harus
+diketik. Tab Log dan Mutasi tidak diproteksi selain baris judulnya; badannya
+ditulis Edge Function dan tidak boleh ada apa pun yang menghalanginya.
 """
 import argparse
 import os
@@ -30,23 +30,18 @@ PENANDA = "so-kartini otomatis"
 
 # (nama tab, rentang, keterangan)
 LINDUNGI = [
-    ("Rekap", "A1:F1000", "hasil QUERY dari Log — kotak tanggal G1 sengaja dibiarkan bebas"),
-    ("Template Olsera", "A1:G1000", "hasil QUERY dari Log untuk impor POS"),
-    ("Arsip Harian", "A1:E5000", "hasil QUERY dari Log"),
-    ("Arsip Bulanan", "A1:E2000", "hasil QUERY dari Log"),
-    ("Rekap Mutasi", "A1:H5000", "hasil QUERY dari Mutasi"),
-    ("Kadaluarsa", "A1:K5000", "hasil QUERY dari Log + kolom bantu"),
     ("Ringkasan", "A1:P60", "seluruhnya formula yang membaca tab lain"),
+    ("Cari Barang", "A2:L60", "formula pencarian — kotak cari B1 sengaja dibiarkan bebas"),
+    ("Stok", "A1:M2", "baris penanda + judul; isinya ditulis scripts/hitung_stok.py"),
+    ("Selisih SO", "A1:K2", "baris penanda + judul; isinya ditulis scripts/selisih_so.py"),
     ("Barang Rusak", "A1:N5000", "hasil QUERY dari Mutasi + kolom nilai"),
+    ("Kadaluarsa", "A1:K5000", "hasil QUERY dari Log + kolom bantu"),
+    ("Arsip Harian", "A1:E5000", "hasil QUERY dari Log"),
     ("Harga", "A1:H1", "judul; isinya ditulis scripts/harga_master.py"),
-    ("Stok Gudang", "A1:M1", "judul; isinya ditulis scripts/hitung_saldo.py"),
-    ("Stok Display", "A1:O1", "judul; isinya ditulis scripts/saldo_display.py"),
-    ("Arsip Saldo", "A1:H1", "judul; isinya potret harian dari dua skrip saldo"),
-    ("Selisih SO", "A1:K1", "judul; isinya ditulis scripts/selisih_so.py"),
+    ("Penjualan", "A1:I1", "judul; isinya ditulis scripts/import_penjualan.py"),
     ("Log", "A1:I1", "baris judul saja — badan Log harus tetap bisa ditulis upload-rak"),
     ("Mutasi", "A1:L1", "baris judul saja — badan Mutasi ditulis upload-mutasi"),
 ]
-
 # Bisa ditimpa lewat env SO_KEY_PATH supaya skrip yang sama bisa jalan di
 # GitHub Actions, di mana kunci ditulis ke berkas sementara.
 KEY_PATH = os.environ.get(

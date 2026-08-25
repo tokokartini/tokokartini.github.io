@@ -1,10 +1,15 @@
 # -*- coding: utf-8 -*-
-"""Tambah tab 'Mutasi' + 'Rekap Mutasi' di sheet 'SO Toko Kartini'.
+"""Pasang baris judul tab 'Mutasi' di sheet 'SO Toko Kartini'.
 
-Seperti add_arsip_bulanan.py dan BERBEDA dari setup_sheet.py, skrip ini hanya
-menyentuh dua tab barunya sendiri -- Rekap!G1 tidak dikosongkan, formula Log /
-Rekap / Template Olsera / Arsip tidak disentuh. Jadi aman dijalankan kapan saja,
-termasuk saat SO sedang berjalan, dan aman diulang.
+BERBEDA dari setup_sheet.py, skrip ini hanya menyentuh baris judul tab Mutasi --
+isinya tidak, tab lain tidak. Aman dijalankan kapan saja, termasuk saat SO sedang
+berjalan, dan aman diulang.
+
+Tab 'Rekap Mutasi' dulu ikut dibuat di sini, sekarang tidak lagi: tab itu
+mengagregat tab Mutasi yang sendirinya sudah satu baris per barang dan mudah
+dibaca. Yang menjawab pertanyaan sungguhan adalah tab Stok (akibatnya pada stok),
+Barang Rusak (yang hangus, lengkap rupiahnya), dan Cari Barang (riwayat satu
+barang). Rekap Mutasi duduk di tengah tanpa pekerjaan, jadi dibuang.
 """
 import os
 import socket
@@ -40,31 +45,7 @@ MUTASI_HEADER = [
     "Rincian", "Qty", "Satuan", "SKU", "Nota", "Sebab",
 ]
 
-REKAP_HEADER = ["Tanggal", "Jenis", "Dari", "Ke", "SKU", "Produk", "Satuan", "Total Qty"]
 
-# Rekap Mutasi: semua tanggal, terbaru di atas -- bukan satu hari seperti tab Rekap.
-# Alasannya mutasi dibaca sebagai riwayat ("kapan terakhir Gulaku naik ke display"),
-# dan angka kumulatifnya nanti jadi bahan hitung saldo per lokasi.
-#
-# Col1=Tanggal, Col2=Jenis, Col3=Dari, Col4=Ke, Col5=Produk, Col6=SKU, Col7=Satuan, Col8=Qty
-#
-# Agregatnya pakai QUERY group by, BUKAN ARRAYFORMULA(SUMIFS(...)): SUMIFS tidak
-# ter-vektor di dalam ARRAYFORMULA, tiap baris ikut hasil baris pertama. Pernah bikin
-# dua SKU beda sama-sama tampil 75 di tab Rekap.
-#
-# Locale sheet in_ID: pemisah argumen ';' dan pemisah kolom array '\'.
-SUMBER = (
-    'ARRAYFORMULA(LEFT(Mutasi!A2:A;10))\\'
-    'Mutasi!C2:C\\Mutasi!D2:D\\Mutasi!E2:E\\Mutasi!F2:F\\Mutasi!J2:J\\Mutasi!I2:I\\Mutasi!H2:H'
-)
-
-REKAP_MUTASI = (
-    '=IFERROR(QUERY({' + SUMBER + '};'
-    '"select Col1, Col2, Col3, Col4, Col6, Col5, Col7, sum(Col8) '
-    "where Col6<>'' "
-    'group by Col1, Col2, Col3, Col4, Col6, Col5, Col7 '
-    "order by Col1 desc, Col5 label sum(Col8) ''\";0);\"\")"
-)
 
 
 def retry(fn, tries=6, delay=3):
@@ -108,26 +89,9 @@ def main():
 
     # Hanya baris judul yang ditulis ulang -- data yang sudah ada tidak disentuh.
     retry(lambda: mutasi.update(values=[MUTASI_HEADER], range_name="A1:L1"))
-    retry(lambda: mutasi.format("A1:K1", {"textFormat": {"bold": True}}))
+    retry(lambda: mutasi.format("A1:L1", {"textFormat": {"bold": True}}))
 
-    rekap = get_or_add_worksheet(sh, "Rekap Mutasi", rows=50000, cols=8)
-    retry(lambda: rekap.update(values=[REKAP_HEADER], range_name="A1:H1"))
-    retry(lambda: rekap.format("A1:H1", {"textFormat": {"bold": True}}))
-    retry(lambda: rekap.update(values=[[REKAP_MUTASI]], range_name="A2", raw=False))
-    time.sleep(3)
-
-    cek = retry(lambda: rekap.get_values("A2:H3"))
-    print(f"Rekap Mutasi A2:H3: {cek}", flush=True)
-
-    if baris_data:
-        tanggal_terakhir = max(r[0][:10] for r in isi[1:] if r and r[0])
-        assert cek and cek[0][0] == tanggal_terakhir, f"formula Rekap Mutasi gagal: {cek}"
-        assert len(cek[0]) == 8 and cek[0][4] and cek[0][7], f"kolom Rekap Mutasi kurang: {cek}"
-        print("Rekap Mutasi formula verified [OK]", flush=True)
-    else:
-        print("Mutasi masih kosong -- formula terpasang, belum bisa diuji isinya", flush=True)
-
-    print("Selesai. Tab Log/Rekap/Template Olsera/Arsip tidak disentuh.", flush=True)
+    print("Selesai. Isi tab Mutasi dan tab lain tidak disentuh.", flush=True)
 
 
 if __name__ == "__main__":

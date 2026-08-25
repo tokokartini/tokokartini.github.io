@@ -73,12 +73,10 @@ Buka sheet, cocokkan:
 | Tab | Yang harus kelihatan |
 |---|---|
 | **Log** | satu baris per produk per rak; kolom Rincian sesuai yang diketik |
-| **Rekap** | jumlah per SKU, nama produk berawalan `STOK ` |
-| **Template Olsera** | bentuk siap impor POS |
 | **Arsip Harian** | tanggal latihan muncul |
 | **Kadaluarsa** | produk yang tadi diisi ED, dengan Sisa Hari + Nilai HPP |
 | **Mutasi** | tiga baris dari langkah 5, kolom Jenis benar |
-| **Rekap Mutasi** | agregat dari tab Mutasi |
+| **Barang Rusak** | yang dibuang, lengkap nilai rupiahnya |
 
 ## 7. Hitung saldo
 
@@ -86,16 +84,17 @@ Salah satu:
 
 - halaman admin → **🧮 Hitung saldo stok** (kalau `GITHUB_TOKEN` sudah dipasang)
 - GitHub → repo `so-kartini-jadwal` → Actions → *Hitung saldo* → Run workflow
-- dari laptop: `cd scripts && python3 -u hitung_saldo.py && python3 -u saldo_display.py`
+- dari laptop: `cd scripts && python3 -u hitung_stok.py && python3 -u selisih_so.py`
 
 Lalu periksa:
 
 | Tab | Yang harus kelihatan |
 |---|---|
-| **Stok Gudang** | sisa = hasil SO + masuk − keluar, kolom Nilai Sisa ada rupiahnya |
-| **Stok Display** | isi ulang dari langkah 5 masuk kolom Isi Ulang |
-| **Arsip Saldo** | baris bertanggal hari ini |
+| **Stok** | baris 1 berbunyi `✓ Terbaru`; sisa gudang = SO + masuk − keluar, kolom Nilai Sisa ada rupiahnya |
+| **Stok** (Area Display) | isi ulang dari langkah 5 masuk kolom Masuk |
+| **Selisih SO** | selisih antara perkiraan dan hitungan fisik |
 | **Ringkasan** | nilai stok bukan Rp 0, "Area Display sudah di-SO?" = **sudah** |
+| **Cari Barang** | ketik nama produk A, semua blok terisi |
 
 Kalau ada baris tanpa harga, jalankan `python3 -u harga_master.py` lalu ulangi.
 
@@ -108,7 +107,7 @@ aplikasi.
 cd scripts
 python3 -u bersihkan_simulasi.py 2026-08-26            # lihat dulu apa yang kena
 python3 -u bersihkan_simulasi.py 2026-08-26 --tulis    # baru hapus
-python3 -u hitung_saldo.py && python3 -u saldo_display.py
+python3 -u hitung_stok.py && python3 -u selisih_so.py
 ```
 
 Skrip itu membuang baris tab Log + Mutasi dan baris `count_entries` + `movements`
