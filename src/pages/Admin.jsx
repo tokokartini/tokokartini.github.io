@@ -55,6 +55,8 @@ export default function Admin() {
   const [syncErr, setSyncErr] = useState(false)
   const [syncBusy, setSyncBusy] = useState(false)
   const [syncMsg, setSyncMsg] = useState('')
+  const [saldoBusy, setSaldoBusy] = useState(false)
+  const [saldoMsg, setSaldoMsg] = useState('')
 
   async function load() {
     setLoadErr(false)
@@ -167,6 +169,22 @@ export default function Admin() {
       }
     } finally {
       setAcctBusy('')
+    }
+  }
+
+  // Tombol ini cuma MEMINTA perhitungan: Edge Function memicu workflow GitHub
+  // yang menjalankan skrip Python asli, dan itu butuh sekitar semenit. Jadi
+  // pesannya sengaja bilang "diminta", bukan "selesai" -- menjanjikan angka yang
+  // belum tentu sudah ada di sheet cuma bikin orang bolak-balik mengecek.
+  async function hitungSaldo() {
+    setSaldoBusy(true)
+    setSaldoMsg('')
+    try {
+      const { data, error } = await supabase.functions.invoke('hitung-saldo', { body: {} })
+      if (error || !data?.ok) setSaldoMsg(`err:${data?.error || 'Gagal meminta perhitungan — coba lagi'}`)
+      else setSaldoMsg(`ok:${data.pesan}`)
+    } finally {
+      setSaldoBusy(false)
     }
   }
 
@@ -289,6 +307,20 @@ export default function Admin() {
         )}
         <button className="secondary" disabled={syncBusy} onClick={syncProduk}>
           {syncBusy ? 'Menarik data…' : '🔄 Sync produk'}
+        </button>
+      </div>
+
+      <div className="card">
+        <p className="section-title">Stok</p>
+        <p className="muted" style={{ marginBottom: 12 }}>
+          Hitung ulang sisa stok tiap gudang dan Area Display, lalu tulis ke tab Stok Gudang,
+          Stok Display, dan Arsip Saldo. Berjalan sendiri tiap malam jam 03.30.
+        </p>
+        {saldoMsg && (
+          <p className={saldoMsg.startsWith('ok:') ? 'ok' : 'error'}>{saldoMsg.slice(saldoMsg.indexOf(':') + 1)}</p>
+        )}
+        <button className="secondary" disabled={saldoBusy} onClick={hitungSaldo}>
+          {saldoBusy ? 'Meminta…' : '🧮 Hitung saldo stok'}
         </button>
       </div>
 
