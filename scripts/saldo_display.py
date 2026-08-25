@@ -40,20 +40,25 @@ import time
 import warnings
 from collections import defaultdict
 
+import harga_lookup
+
 DISPLAY = "Area Display"
 TAB = "Stok Display"
 JUDUL = ["Produk", "SKU", "Satuan", "Hasil SO", "Tgl SO",
-         "Isi Ulang", "Keluar", "Terjual", "Sisa", "Catatan"]
+         "Isi Ulang", "Keluar", "Terjual", "Sisa",
+         "HPP", "Nilai Sisa", "Nilai Terjual (HPP)", "Catatan"]
 
 
 # --- Bagian murni: bisa diuji tanpa jaringan -------------------------------
 
-def hitung_display(log_rows, mutasi_rows, jual_rows):
+def hitung_display(log_rows, mutasi_rows, jual_rows, harga_rows=()):
     """Kembalikan (baris, peringatan).
 
     log_rows    : tab Log tanpa judul     -> [Waktu, Staff, Rak, Produk, Rincian, Qty, Satuan, ED, SKU]
     mutasi_rows : tab Mutasi tanpa judul  -> [Waktu, Staff, Jenis, Dari, Ke, Produk, Rincian, Qty, Satuan, SKU, Nota]
     jual_rows   : tab Penjualan tanpa judul -> [Awal, Akhir, Produk Master, Satuan Dasar, Qty Dasar]
+    harga_rows  : tab Harga tanpa judul, untuk kolom HPP + nilai. Kosong = kolom
+                  nilai ikut kosong, hitungan qty tetap jalan.
 
     Kunci penggabungan adalah NAMA PRODUK, bukan SKU: tab Penjualan cuma punya nama
     (hasil pemetaan dari export Olsera lewat tab Peta Satuan Olsera). SKU tetap
@@ -120,6 +125,8 @@ def hitung_display(log_rows, mutasi_rows, jual_rows):
     produk_lintas = {_kolom(r, 2) for r in jual_rows
                      if (_kolom(r, 0), _kolom(r, 1)) in lintas and _kolom(r, 2)}
 
+    per_sku, per_nama, _ = harga_lookup.muat_harga(harga_rows)
+
     baris = []
     for produk in sorted(set(baseline) | set(masuk) | set(keluar) | set(terjual)):
         awal_qty = baseline.get(produk, 0.0)
@@ -136,10 +143,14 @@ def hitung_display(log_rows, mutasi_rows, jual_rows):
             catatan.append("ada penjualan di rentang yang melintasi hari SO, belum ikut dihitung")
 
         sisa = "" if not tgl_so else _rapi(awal_qty + m - k - j)
+        sat = satuan.get(produk, "")
+        hpp, _jual = harga_lookup.cari(per_sku, per_nama, sku.get(produk, ""), produk, sat)
         baris.append([
-            produk, sku.get(produk, ""), satuan.get(produk, ""),
+            produk, sku.get(produk, ""), sat,
             _rapi(awal_qty), tgl_so or "belum pernah SO",
             _rapi(m), _rapi(k), _rapi(j), sisa,
+            "" if hpp is None else _rapi(hpp),
+            harga_lookup.nilai(sisa, hpp), harga_lookup.nilai(j, hpp),
             "; ".join(catatan),
         ])
 
@@ -215,7 +226,7 @@ def uji():
 
     kopi = per["Kopi Saset"]
     assert kopi[8] == -8, f"produk laku tanpa SO harus minus, bukan 0: {kopi}"
-    assert "tidak ikut terhitung saat SO display" in kopi[9], f"catatan hilang: {kopi}"
+    assert "tidak ikut terhitung saat SO display" in kopi[12], f"catatan hilang: {kopi}"
     assert not peringatan, f"tidak ada rentang melintas, harusnya sunyi: {peringatan}"
 
     # Rentang yang melintasi hari SO tidak boleh ikut, tapi WAJIB dilaporkan.
@@ -223,7 +234,7 @@ def uji():
         log, mutasi, [["2026-08-08", "2026-08-14", "Gula", "Pack", "50"]])
     g2 = {b[0]: b for b in baris2}["Gula"]
     assert g2[7] == 0, f"rentang melintas tidak boleh dihitung: {g2}"
-    assert "melintasi hari SO" in g2[9], f"catatan baris hilang: {g2}"
+    assert "melintasi hari SO" in g2[12], f"catatan baris hilang: {g2}"
     assert peringatan2 and "melintasi hari SO" in peringatan2[0], peringatan2
 
     # Belum pernah SO display sama sekali -> kolom Sisa kosong, bukan angka minus besar.
@@ -233,6 +244,22 @@ def uji():
     assert g3[4] == "belum pernah SO", g3
     assert g3[5] == 39, f"tanpa SO, semua isi ulang ikut: {g3}"    # 9 + 30
     assert peringatan3 and "belum pernah di-SO" in peringatan3[0], peringatan3
+
+    # Tanpa tab Harga, tiga kolom nilai kosong tapi qty tetap benar.
+    assert gula[9] == "" and gula[10] == "" and gula[11] == "", f"tanpa harga harus kosong: {gula}"
+
+    harga = [["GLK", "Gula", "Pack", 1, 12000, 15000, "HJ3", "Bahan Kue"]]
+    dgn = {b[0]: b for b in hitung_display(log, mutasi, jual, harga)[0]}
+    g = dgn["Gula"]
+    assert g[9] == 12000, f"HPP lewat SKU gagal: {g}"
+    assert g[10] == 34 * 12000, f"Nilai Sisa salah: {g}"
+    assert g[11] == 12 * 12000, f"Nilai Terjual salah: {g}"
+    k = dgn["Kopi Saset"]
+    assert k[9] == "" and k[10] == "", f"produk tanpa harga harus kosong: {k}"
+    # Sisa minus tetap dinilai -- itu justru kerugian yang mau dilihat.
+    dgn2 = {b[0]: b for b in hitung_display(log, mutasi, jual,
+            harga + [["KPS", "Kopi Saset", "Pcs", 1, 2000, 3000, "HJ3", "X"]])[0]}
+    assert dgn2["Kopi Saset"][10] == -16000, f"nilai sisa minus salah: {dgn2['Kopi Saset']}"
 
     print("semua uji hitung_display LOLOS")
 
@@ -255,34 +282,45 @@ def tulis_sheet():
     log = sh.worksheet("Log").get_all_values()[1:]
     mutasi = sh.worksheet("Mutasi").get_all_values()[1:]
     try:
+        harga = sh.worksheet("Harga").get_all_values()[1:]
+    except gspread.exceptions.WorksheetNotFound:
+        harga = []
+        print("Tab 'Harga' belum ada — kolom HPP/Nilai dikosongkan. "
+              "Jalankan scripts/harga_master.py.", flush=True)
+    try:
         jual = sh.worksheet("Penjualan").get_all_values()[1:]
     except gspread.exceptions.WorksheetNotFound:
         print("Tab 'Penjualan' belum ada. Jalankan dulu:\n"
               '  python3 -u import_penjualan.py "<export Olsera.xlsx>"', flush=True)
         return 1
-    print(f"Log {len(log)} baris, Mutasi {len(mutasi)} baris, Penjualan {len(jual)} baris",
-          flush=True)
+    print(f"Log {len(log)} baris, Mutasi {len(mutasi)} baris, "
+          f"Penjualan {len(jual)} baris, Harga {len(harga)} baris", flush=True)
 
-    baris, peringatan = hitung_display(log, mutasi, jual)
+    baris, peringatan = hitung_display(log, mutasi, jual, harga)
     print(f"{len(baris)} produk di Area Display", flush=True)
 
     try:
         ws = sh.worksheet(TAB)
         ws.clear()
-        if ws.col_count < len(JUDUL) + 2:
-            ws.resize(rows=max(ws.row_count, 20000), cols=len(JUDUL) + 2)
+        if ws.col_count < len(JUDUL) + 3:
+            ws.resize(rows=max(ws.row_count, 20000), cols=len(JUDUL) + 3)
     except gspread.exceptions.WorksheetNotFound:
-        ws = sh.add_worksheet(TAB, rows=20000, cols=len(JUDUL) + 2)
+        ws = sh.add_worksheet(TAB, rows=20000, cols=len(JUDUL) + 3)
 
     stempel = time.strftime("%Y-%m-%d %H:%M:%S")
     ws.update(values=[JUDUL] + (baris or [["(belum ada data)"] + [""] * (len(JUDUL) - 1)]),
               range_name="A1")
-    ws.format("A1:J1", {"textFormat": {"bold": True}})
+    ws.format("A1:M1", {"textFormat": {"bold": True}})
     ws.freeze(rows=1)
 
-    catatan = [f"Dihitung {stempel} WIB — jalankan ulang scripts/saldo_display.py untuk angka terbaru"]
+    total = sum(b[10] for b in baris if b[10] != "")
+    tanpa = sum(1 for b in baris if b[9] == "")
+    catatan = [f"Dihitung {stempel} WIB — jalankan ulang scripts/saldo_display.py untuk angka terbaru",
+               f"Nilai stok display Rp {total:,.0f}".replace(",", "."),
+               f"{tanpa} baris tanpa harga (jalankan scripts/harga_master.py kalau master berubah)"]
     catatan += peringatan
-    ws.update(values=[[c] for c in catatan], range_name="L1")
+    ws.update(values=[[c] for c in catatan], range_name="O1")
+    print(f"Nilai stok display Rp {total:,.0f}, {tanpa} baris tanpa harga", flush=True)
 
     print(f"Tab '{TAB}' ditulis ulang, {len(baris)} baris, stempel {stempel}", flush=True)
     for p in peringatan:

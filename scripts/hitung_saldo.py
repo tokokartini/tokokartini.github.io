@@ -25,17 +25,21 @@ import time
 import warnings
 from collections import defaultdict
 
+import harga_lookup
+
 # --- Bagian murni: bisa diuji tanpa jaringan -------------------------------
 
 DISPLAY = "Area Display"
 
 
-def hitung_saldo(log_rows, mutasi_rows, lokasi_aktif):
+def hitung_saldo(log_rows, mutasi_rows, lokasi_aktif, harga_rows=()):
     """Kembalikan daftar baris Stok Gudang.
 
     log_rows    : baris tab Log tanpa judul  -> [Waktu, Staff, Rak, Produk, Rincian, Qty, Satuan, ED, SKU]
     mutasi_rows : baris tab Mutasi tanpa judul -> [Waktu, Staff, Jenis, Dari, Ke, Produk, Rincian, Qty, Satuan, SKU, Nota]
     lokasi_aktif: daftar nama lokasi dari tabel racks, Area Display sudah dibuang
+    harga_rows  : baris tab Harga tanpa judul, untuk kolom HPP + Nilai Sisa.
+                  Kosong = kedua kolom itu ikut kosong, sisanya tetap terhitung.
 
     Perbandingan waktu pakai timestamp penuh, bukan tanggal saja: mutasi yang
     terjadi beberapa jam SESUDAH rak itu dihitung harus ikut, sedangkan yang
@@ -73,6 +77,8 @@ def hitung_saldo(log_rows, mutasi_rows, lokasi_aktif):
         if dari in lokasi_aktif and waktu > waktu_so.get(dari, ""):
             keluar[(dari, sku)] += qty
 
+    per_sku, per_nama, _ = harga_lookup.muat_harga(harga_rows)
+
     kunci = set(baseline) | set(masuk) | set(keluar)
     baris = []
     for lokasi, sku in sorted(kunci, key=lambda k: (k[0], nama.get(k[1], ("", ""))[0])):
@@ -85,10 +91,13 @@ def hitung_saldo(log_rows, mutasi_rows, lokasi_aktif):
         # "belum pernah SO" ikut terpotong jadi "belum pern".
         waktu = waktu_so.get(lokasi, "")
         tgl_so = waktu[:10] if waktu else "belum pernah SO"
+        sisa = _rapi(awal + m - k)
+        hpp, _jual = harga_lookup.cari(per_sku, per_nama, sku, produk, satuan)
         baris.append([
             lokasi, sku, produk, satuan,
             _rapi(awal), tgl_so,
-            _rapi(m), _rapi(k), _rapi(awal + m - k),
+            _rapi(m), _rapi(k), sisa,
+            "" if hpp is None else _rapi(hpp), harga_lookup.nilai(sisa, hpp),
         ])
     return baris
 
@@ -145,6 +154,24 @@ def uji():
     assert mika[8] == 30, f"sisa lokasi tanpa SO salah: {mika}"
 
     assert not any(b[0] == DISPLAY for b in hitung_saldo(log, mutasi, lokasi)), "display tidak boleh ikut"
+
+    # Tanpa tab Harga kolom HPP/Nilai kosong, tapi hitungan qty tetap jalan.
+    assert gula[9] == "" and gula[10] == "", f"tanpa harga harus kosong: {gula}"
+
+    harga = [
+        ["GLK", "Gula", "Pack", 1, 12000, 15000, "HJ3", "Bahan Kue"],
+        # Ceres dicari lewat nama+satuan karena SKU-nya beda di tab Harga
+        ["CRS-LAIN", "Ceres", "Pcs", 1, 5000, 7000, "HJ3", "Bahan Kue"],
+    ]
+    dgn = {(b[0], b[1]): b for b in hitung_saldo(log, mutasi, lokasi, harga)}
+    g = dgn[("Gudang Ciherang", "GLK")]
+    assert g[9] == 12000, f"HPP lewat SKU gagal: {g}"
+    assert g[10] == 255 * 12000, f"Nilai Sisa salah: {g}"
+    c = dgn[("Gudang Ciherang", "CRS")]
+    assert c[9] == 5000 and c[10] == 250000, f"HPP lewat nama+satuan gagal: {c}"
+    m = dgn[("Gudang Packaging", "MKA")]
+    assert m[9] == "" and m[10] == "", f"produk tanpa harga harus kosong, bukan 0: {m}"
+
     print("semua uji hitung_saldo LOLOS")
 
 
@@ -164,7 +191,14 @@ def tulis_sheet():
 
     log = sh.worksheet("Log").get_all_values()[1:]
     mutasi = sh.worksheet("Mutasi").get_all_values()[1:]
-    print(f"Log {len(log)} baris, Mutasi {len(mutasi)} baris", flush=True)
+    try:
+        harga = sh.worksheet("Harga").get_all_values()[1:]
+    except gspread.exceptions.WorksheetNotFound:
+        harga = []
+        print("Tab 'Harga' belum ada — kolom HPP/Nilai dikosongkan. "
+              "Jalankan scripts/harga_master.py.", flush=True)
+    print(f"Log {len(log)} baris, Mutasi {len(mutasi)} baris, Harga {len(harga)} baris",
+          flush=True)
 
     # Daftar lokasi diambil dari yang benar-benar muncul di data, bukan daftar tetap
     # di kode -- lokasi baru di tabel racks langsung ikut tanpa mengubah skrip.
@@ -172,25 +206,32 @@ def tulis_sheet():
     lokasi |= {_kolom(r, 3) for r in mutasi} | {_kolom(r, 4) for r in mutasi}
     lokasi -= {DISPLAY, "Barang Datang", ""}
 
-    baris = hitung_saldo(log, mutasi, lokasi)
+    baris = hitung_saldo(log, mutasi, lokasi, harga)
     print(f"{len(baris)} baris saldo di {len(lokasi)} lokasi", flush=True)
 
-    judul = ["Lokasi", "SKU", "Produk", "Satuan", "Hasil SO", "Tgl SO", "Masuk", "Keluar", "Sisa"]
-    # 11 kolom: 9 untuk tabel + kolom K untuk stempel waktu hitung.
+    judul = ["Lokasi", "SKU", "Produk", "Satuan", "Hasil SO", "Tgl SO", "Masuk", "Keluar",
+             "Sisa", "HPP", "Nilai Sisa"]
+    # 13 kolom: 11 untuk tabel + kolom M untuk stempel waktu hitung.
     try:
         ws = sh.worksheet("Stok Gudang")
         ws.clear()
-        if ws.col_count < 11:
-            ws.resize(rows=max(ws.row_count, 20000), cols=11)
+        if ws.col_count < 13:
+            ws.resize(rows=max(ws.row_count, 20000), cols=13)
     except gspread.exceptions.WorksheetNotFound:
-        ws = sh.add_worksheet("Stok Gudang", rows=20000, cols=11)
+        ws = sh.add_worksheet("Stok Gudang", rows=20000, cols=13)
 
     stempel = time.strftime("%Y-%m-%d %H:%M:%S")
-    ws.update(values=[judul] + (baris or [["(belum ada data)", "", "", "", "", "", "", "", ""]]),
+    ws.update(values=[judul] + (baris or [["(belum ada data)"] + [""] * (len(judul) - 1)]),
               range_name="A1")
-    ws.format("A1:I1", {"textFormat": {"bold": True}})
-    ws.update(values=[[f"Dihitung {stempel} WIB — jalankan ulang scripts/hitung_saldo.py untuk angka terbaru"]],
-              range_name="K1")
+    ws.format("A1:K1", {"textFormat": {"bold": True}})
+    ws.freeze(rows=1)
+    total = sum(b[10] for b in baris if b[10] != "")
+    tanpa = sum(1 for b in baris if b[10] == "")
+    ws.update(values=[[f"Dihitung {stempel} WIB — jalankan ulang scripts/hitung_saldo.py untuk angka terbaru"],
+                      [f"Nilai stok gudang Rp {total:,.0f}".replace(",", ".")],
+                      [f"{tanpa} baris tanpa harga (jalankan scripts/harga_master.py kalau master berubah)"]],
+              range_name="M1")
+    print(f"Nilai stok gudang Rp {total:,.0f}, {tanpa} baris tanpa harga", flush=True)
     print(f"Tab 'Stok Gudang' ditulis ulang, {len(baris)} baris, stempel {stempel}", flush=True)
 
     for b in baris[:5]:
