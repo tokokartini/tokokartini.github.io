@@ -31,6 +31,8 @@ import sys
 import time
 import warnings
 
+import google_ulang
+
 TAB = "Harga"
 JUDUL = ["SKU", "Produk", "Satuan", "Isi", "HPP", "Harga Jual", "Slot", "Kategori"]
 
@@ -232,6 +234,11 @@ def main():
     warnings.filterwarnings("ignore", category=DeprecationWarning)
     asli = socket.getaddrinfo
     socket.getaddrinfo = lambda h, p, f=0, t=0, pr=0, fl=0: asli(h, p, socket.AF_INET, t, pr, fl)
+
+    # Google kadang membalas 503 untuk sheet yang sehat (Master Pricelist,
+    # 2026-08-26: 2 dari 3 percobaan). Ini langkah pertama jadwal malam, jadi
+    # tanpa coba-ulang satu 503 mematikan seluruh hitungan malam itu.
+    google_ulang.pasang()
 
     uji()  # pengaman: jangan menulis sheet dengan parser yang rusak
     return jalan()

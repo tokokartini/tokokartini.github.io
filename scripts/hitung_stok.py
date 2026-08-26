@@ -34,6 +34,8 @@ import sys
 import time
 import warnings
 
+import google_ulang
+
 import harga_lookup
 import hitung_saldo
 import saldo_display
@@ -168,6 +170,11 @@ def main():
     warnings.filterwarnings("ignore", category=DeprecationWarning)
     asli = socket.getaddrinfo
     socket.getaddrinfo = lambda h, p, f=0, t=0, pr=0, fl=0: asli(h, p, socket.AF_INET, t, pr, fl)
+
+    # Google kadang membalas 503 untuk sheet yang sehat (Master Pricelist,
+    # 2026-08-26: 2 dari 3 percobaan). Skrip ini ikut jadwal malam; satu 503
+    # sesaat tidak boleh membuat tab Stok diam-diam tidak terbarui semalaman.
+    google_ulang.pasang()
     uji()
     return tulis_sheet()
 
