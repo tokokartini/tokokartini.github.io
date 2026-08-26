@@ -4,7 +4,7 @@ Sheet id `1uP2ntR00nrstLXKTuCYw1IzWDKohQAKsaq3qeeApDgw`, milik Sopian, dishare k
 service account `point-coffee@claude-code-powershel.iam.gserviceaccount.com`.
 Locale `in_ID`, jadi formula pakai `;` dan `\`. Zona Asia/Jakarta.
 
-## Keadaan sekarang: 13 tab
+## Keadaan sekarang: 14 tab
 
 Dikosongkan jadi 4 tab **25 Agustus 2026 sore** atas permintaan Sopian ("udah
 pusing kemana-mana"): enam tab dibuat dalam sehari, dua langsung dibuang, sisanya
@@ -21,14 +21,15 @@ Urutan tabnya menurut cara pakai: yang dibaca di depan, sumber mentah di belakan
 | 3 | **Stok** | `hitung_stok.py` | sisa semua lokasi, gudang dan Area Display jadi satu tabel |
 | 4 | **Stok per Gudang** | formula | tabel silang: barang jadi baris, gudang jadi kolom |
 | 5 | **Selisih SO** | `selisih_so.py` | perkiraan lawan hitungan fisik tiap SO |
-| 6 | **Barang Masuk** | formula | kiriman supplier + siapa yang bawa, dari Mutasi jenis Datang |
-| 7 | **Barang Rusak** | formula | yang hangus + nilainya, dikelompokkan per sebab |
-| 8 | **Kadaluarsa** | formula | barang mendekati ED, terdekat di atas |
-| 9 | **Arsip Harian** | formula | hasil akhir SO per tanggal + SKU, satuan terkecil |
-| 10 | **Riwayat SO** | formula | hasil SO tiap bulan, bulan terakhir dipecah per gudang |
-| 11 | **Log** | Edge Function `upload-rak` | sumber: hasil SO mentah |
-| 12 | **Mutasi** | Edge Function `upload-mutasi` | sumber: barang datang / isi ulang / pindah / rusak |
-| 13 | **Harga** | `harga_master.py` | HPP + harga jual per SKU dari Master Pricelist |
+| 6 | **Penjualan** | `import_penjualan.py` | penjualan POS per hari + status bayar, dari tabel `penjualan_harian` |
+| 7 | **Barang Masuk** | formula | kiriman supplier + siapa yang bawa, dari Mutasi jenis Datang |
+| 8 | **Barang Rusak** | formula | yang hangus + nilainya, dikelompokkan per sebab |
+| 9 | **Kadaluarsa** | formula | barang mendekati ED, terdekat di atas |
+| 10 | **Arsip Harian** | formula | hasil akhir SO per tanggal + SKU, satuan terkecil |
+| 11 | **Riwayat SO** | formula | hasil SO tiap bulan, bulan terakhir dipecah per gudang |
+| 12 | **Log** | Edge Function `upload-rak` | sumber: hasil SO mentah |
+| 13 | **Mutasi** | Edge Function `upload-mutasi` | sumber: barang datang / isi ulang / pindah / rusak |
+| 14 | **Harga** | `harga_master.py` | HPP + harga jual per SKU dari Master Pricelist |
 
 **Tab `Mutasi` tidak boleh dihapus** — Edge Function `upload-mutasi` menulis ke
 situ; tanpa tabnya, menu Pengeluaran di aplikasi langsung gagal.
@@ -41,8 +42,10 @@ WEB APP  ──SO per gudang──────────►  Log
            Pindah Gudang / Rusak
 
 MASTER PRICELIST ─────────────────►  Harga
+EXPORT POS  ──upload halaman admin──►  penjualan_harian (Supabase) ─►  Penjualan
 
   Log + Mutasi + Harga ───────────►  Stok             sisa = SO terakhir + masuk − keluar
+      + Penjualan (Area Display saja)
                           Stok ───►  Stok per Gudang  tabel silang
   Log + Mutasi + Harga ───────────►  Selisih SO       perkiraan lawan hitungan fisik
   Log kolom ED + Harga ───────────►  Kadaluarsa
@@ -64,7 +67,8 @@ Sisa boleh MINUS. Itu alarm mutasi yang lupa dicatat — jangan dipaksa jadi 0.
 ## URUTAN BANGUN ULANG — wajib, bukan saran
 
 ```
-harga_master.py  →  hitung_stok.py  →  add_stok_gudang.py  →  selisih_so.py
+harga_master.py  →  import_penjualan.py  →  hitung_stok.py  →  add_stok_gudang.py
+                 →  selisih_so.py
                  →  add_kadaluarsa.py  →  add_barang_masuk.py  →  add_barang_rusak.py
                  →  add_ringkasan.py  →  add_cari_barang.py
 ```
@@ -94,12 +98,60 @@ harus dicek.
 
 | Tab | Dibangun oleh | Isinya | Kenapa ditahan |
 |---|---|---|---|
-| **Penjualan** | `import_penjualan.py <export.xlsx>` | penjualan POS per periode | POS Olsera mau habis, katalog baru belum jadi |
 | **Peta Satuan Olsera** | `peta_satuan.py <export.xlsx>` | terjemahan satuan POS → master | dihapus 25 Agu; tak perlu lagi kalau katalog POS baru menyalin satuan master persis |
 
-Tanpa tab `Penjualan`, kolom **Terjual** di tab Stok untuk Area Display selalu 0 —
-`hitung_stok.py` melewatinya dengan pesan `Tab 'Penjualan' belum ada — dilewat.`
-Sisa display jadi `SO + isi ulang − keluar` saja, belum dikurangi penjualan POS.
+## Penjualan: dari POS sampai sisa display
+
+Sejak 26 Agu 2026 penjualan masuk lewat **halaman admin aplikasi**, bukan skrip di
+laptop. Export yang dipakai **`Item Penjualan berdasarkan Tanggal`** — bukan
+`Qty Produk Terjual` yang lama.
+
+Bedanya menentukan: export ini punya kolom `item sku`, dan SKU itu sudah menyebut
+produk SEKALIGUS satuannya (`PKG-0053-G` Krtn, `-2` Pack, `-3` Pcs). Diukur pada
+export 17–23 Agu 2026: **668 dari 673 SKU cocok, 99,3%**, omzet tak tercakup
+Rp 103.400 dari Rp 107 juta. Export lama tidak punya kolom itu, jadi dulu harus
+dicocokkan lewat nama + satuan — dan dari situlah tab `Peta Satuan Olsera` dengan
+ratusan baris terjemahan manualnya lahir. Masalahnya jenis export, bukan katalog.
+
+Alurnya:
+
+1. Admin pilih berkas di halaman admin. **Browser memotong 69 kolom jadi 9** —
+   email karyawan, nomor HP + alamat pelanggan, HPP, profit, dan komisi tidak
+   pernah dikirim ke mana pun. Pembacanya `src/lib/parsePenjualan.js` (fflate +
+   XML, bukan SheetJS: versi npm-nya basi dan ~900KB untuk PWA lewat kuota).
+2. Layar menampilkan rentang tanggal, jumlah baris, omzet, piutang, dan berapa
+   baris tanpa SKU **sebelum** disimpan. Wajib: kiriman ini MENGGANTI seluruh
+   baris untuk tanggal di dalamnya, jadi berkas salah pilih bisa menghapus
+   penjualan sebulan.
+3. `ganti_penjualan()` di Postgres — satu fungsi, satu transaksi, hapus-lalu-isi
+   tidak bisa terpisah. Mengganti, bukan menambah: transaksi yang dibatalkan di
+   POS ikut hilang, dan upload ulang berkas yang sama tidak menggandakan apa pun.
+4. `import_penjualan.py` membaca tabel + `products` (kolom `mult`) lalu menulis
+   tab **Penjualan** dalam satuan dasar master.
+5. `hitung_stok.py` mengurangkannya dari Area Display saja — POS tidak pernah
+   menjual dari gudang.
+
+**Sehari sekali cukup.** Sekali sebulan pilih rentang sebulan supaya tempo yang
+sudah dibayar ikut terbarui: status `A` (belum bayar) berubah jadi `Z` di baris
+tanggal transaksi ASLINYA, dan tidak ada kolom yang mencatat kapan dibayar. Kalau
+cuma tanggal kemarin yang pernah dibaca, piutang menggelembung selamanya.
+
+**TEMPO tetap mengurangi stok.** Barangnya sudah dibawa pelanggan, cuma bayarnya
+belakangan (`posting time` terisi di semua baris). Di contoh sepekan itu Rp 13,2
+juta dari tiga pelanggan.
+
+**Penjualan pada HARI SO tidak dihitung**, dan itu disengaja: SO punya jam,
+penjualan cuma punya tanggal, jadi tidak ada cara memisahkan yang laku sebelum
+barangnya dihitung dari yang sesudah. Dilaporkan per produk di kolom Catatan,
+bukan dibuang diam-diam.
+
+**Baris yang gagal dicocokkan tetap ditulis** dengan kolom Sebab terisi. Di export
+contoh ada 39 baris tanpa SKU senilai Rp 915.500 ("kertas nasi roll", "duo 40
+hitam") — barang yang terjual tapi stoknya tidak dilacak siapa pun. Itu daftar
+kerja, bukan sampah.
+
+Tanpa tab `Penjualan`, kolom **Terjual** di tab Stok untuk Area Display selalu 0
+dan sisa display cuma `SO + isi ulang − keluar`.
 
 Cadangan isi 16 tab sebelum dikosongkan (CSV + `_formula.json`):
 `~/Documents/Olsera/Stok/backup-sheet-2026-08-25/`

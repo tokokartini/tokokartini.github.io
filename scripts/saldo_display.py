@@ -40,6 +40,7 @@ from collections import defaultdict
 
 import harga_lookup
 
+KOL_SEBAB = 10   # tab Penjualan: kolom Sebab. Terisi = gagal dikonversi.
 DISPLAY = "Area Display"
 JUDUL = ["Produk", "SKU", "Satuan", "Hasil SO", "Tgl SO",
          "Isi Ulang", "Keluar", "Terjual", "Sisa",
@@ -108,25 +109,33 @@ def hitung_display(log_rows, mutasi_rows, jual_rows, harga_rows=()):
         if dari == DISPLAY:
             keluar[produk] += qty
 
-    # Penjualan: rentang tanggal, jadi butuh aturan lawan tanggal SO.
-    lintas = set()
+    # Penjualan: satu baris satu HARI (sejak tab Penjualan diisi dari upload POS
+    # per tanggal). Dulu isinya rentang tanggal dan rentang yang melintasi hari SO
+    # terpaksa dibuang seluruhnya; sekarang tidak ada lagi kasus itu.
+    #
+    # Yang tersisa cuma keremangan sehari: SO display dihitung pada JAM tertentu,
+    # sedangkan penjualan cuma punya tanggal. Penjualan di hari SO itu sendiri
+    # sebagian sudah tercermin di hitungan fisik (yang laku sebelum dihitung) dan
+    # sebagian belum. Tidak bisa dipisah tanpa jam, jadi TIDAK dihitung, tapi
+    # dilaporkan per produk supaya keliatan -- bukan dibuang diam-diam.
+    hari_so = tgl_so[:10] if tgl_so else ""
+    sehari = set()
     for r in jual_rows:
-        awal, akhir, produk = _kolom(r, 0), _kolom(r, 1), _kolom(r, 2)
-        if not produk or not awal:
+        tgl, produk = _kolom(r, 0)[:10], _kolom(r, 2)
+        if not produk or not tgl:
             continue
-        if _kolom(r, 8):
+        if _kolom(r, KOL_SEBAB):
             continue          # ada Sebab = gagal dikonversi, jangan dihitung
-        satuan.setdefault(produk, _kolom(r, 4))
-        if tgl_so:
-            if akhir < tgl_so:
-                continue                       # seluruhnya sebelum SO, sudah tercermin
-            if awal <= tgl_so:
-                lintas.add((awal, akhir))      # melintasi hari SO, tidak bisa dipisah
+        satuan.setdefault(produk, _kolom(r, 6))
+        if hari_so:
+            if tgl < hari_so:
+                continue                  # sebelum SO, sudah tercermin di hitungan fisik
+            if tgl == hari_so:
+                sehari.add(produk)        # hari SO itu sendiri: tidak bisa dipisah
                 continue
         terjual[produk] += _angka(_kolom(r, 5))
 
-    produk_lintas = {_kolom(r, 2) for r in jual_rows
-                     if (_kolom(r, 0), _kolom(r, 1)) in lintas and _kolom(r, 2)}
+    produk_lintas = sehari
 
     per_sku, per_nama, _ = harga_lookup.muat_harga(harga_rows)
 
@@ -143,7 +152,7 @@ def hitung_display(log_rows, mutasi_rows, jual_rows, harga_rows=()):
         elif produk not in baseline:
             catatan.append("tidak ikut terhitung saat SO display")
         if produk in produk_lintas:
-            catatan.append("ada penjualan di rentang yang melintasi hari SO, belum ikut dihitung")
+            catatan.append("ada penjualan di hari SO itu sendiri, belum ikut dihitung")
 
         sisa = "" if not tgl_so else _rapi(awal_qty + m - k - j)
         sat = satuan.get(produk, "")
@@ -162,11 +171,12 @@ def hitung_display(log_rows, mutasi_rows, jual_rows, harga_rows=()):
         peringatan.append(
             "Area Display belum pernah di-SO, jadi kolom Sisa dikosongkan. "
             "Hitung display dulu di aplikasi, baru angka sisa ada artinya.")
-    for awal, akhir in sorted(lintas):
+    if sehari:
         peringatan.append(
-            f"Penjualan {awal} s/d {akhir} melintasi hari SO ({tgl_so}), TIDAK dihitung. "
-            "Sisa display untuk produk yang laku di rentang itu kelihatan lebih banyak "
-            "daripada kenyataan.")
+            f"{len(sehari)} produk laku pada hari SO ({hari_so}) itu sendiri dan TIDAK "
+            "dihitung: penjualan cuma punya tanggal, SO punya jam, jadi tidak bisa "
+            "dipisah mana yang laku sebelum dan sesudah dihitung. Sisanya kelihatan "
+            "sedikit lebih banyak daripada kenyataan, cuma untuk hari itu.")
     return baris, peringatan
 
 
@@ -208,13 +218,15 @@ def uji():
         # mutasi antar gudang, display tidak terlibat -> abaikan
         ["2026-08-12 08:00:00", "rian", "Pindah", "Gudang Dapur Cherry", "Gudang Ciherang", "Ceres", "", "77", "Pcs", "CRS", ""],
     ]
+    # tab Penjualan: Tanggal, SKU, Produk, Satuan, Qty, Qty Dasar, Satuan Dasar,
+    #                Omzet, Bayar, Pelanggan, Sebab
     jual = [
-        ["2026-06-15", "2026-06-21", "Gula", "", "Pack", "100", "", "", ""],   # sebelum SO -> abaikan
-        ["2026-08-11", "2026-08-17", "Gula", "", "Pack", "12", "", "", ""],    # sesudah SO -> dihitung
-        ["2026-08-11", "2026-08-17", "Kopi Saset", "", "Pcs", "8", "", "", ""],  # laku tapi tak pernah di-SO
-        # Baris gagal konversi: HARUS dilewat, kalau ikut terhitung sisa display salah.
-        ["2026-08-11", "2026-08-17", "Gula", "Carton (80pcs)", "", "", "2", "50000",
-         "kolom Isi masih kosong"],
+        ["2026-06-15", "GLK", "Gula", "Pack", "100", "100", "Pack", "", "Lunas", "", ""],   # sebelum SO -> abaikan
+        ["2026-08-17", "GLK", "Gula", "Pack", "12", "12", "Pack", "", "Lunas", "", ""],     # sesudah SO -> dihitung
+        ["2026-08-17", "KPS", "Kopi Saset", "Pcs", "8", "8", "Pcs", "", "Lunas", "", ""],   # laku tapi tak pernah di-SO
+        # Baris gagal dicocokkan: HARUS dilewat, kalau ikut terhitung sisa display salah.
+        ["2026-08-17", "", "Gula", "", "2", "", "", "50000", "Lunas", "",
+         "SKU kosong di POS — barang diketik manual, belum ada di master"],
     ]
     baris, peringatan = hitung_display(log, mutasi, jual)
     per = {b[0]: b for b in baris}
@@ -233,15 +245,24 @@ def uji():
     kopi = per["Kopi Saset"]
     assert kopi[8] == -8, f"produk laku tanpa SO harus minus, bukan 0: {kopi}"
     assert "tidak ikut terhitung saat SO display" in kopi[12], f"catatan hilang: {kopi}"
-    assert not peringatan, f"tidak ada rentang melintas, harusnya sunyi: {peringatan}"
+    assert not peringatan, f"tidak ada penjualan di hari SO, harusnya sunyi: {peringatan}"
 
-    # Rentang yang melintasi hari SO tidak boleh ikut, tapi WAJIB dilaporkan.
+    # Penjualan pada HARI SO itu sendiri tidak boleh ikut, tapi WAJIB dilaporkan:
+    # SO punya jam, penjualan cuma punya tanggal, jadi tidak bisa dipisah mana
+    # yang laku sebelum dan sesudah barangnya dihitung.
     baris2, peringatan2 = hitung_display(
-        log, mutasi, [["2026-08-08", "2026-08-14", "Gula", "", "Pack", "50", "", "", ""]])
+        log, mutasi,
+        [["2026-08-10", "GLK", "Gula", "Pack", "50", "50", "Pack", "", "Lunas", "", ""]])
     g2 = {b[0]: b for b in baris2}["Gula"]
-    assert g2[7] == 0, f"rentang melintas tidak boleh dihitung: {g2}"
-    assert "melintasi hari SO" in g2[12], f"catatan baris hilang: {g2}"
-    assert peringatan2 and "melintasi hari SO" in peringatan2[0], peringatan2
+    assert g2[7] == 0, f"penjualan di hari SO tidak boleh dihitung: {g2}"
+    assert "hari SO itu sendiri" in g2[12], f"catatan baris hilang: {g2}"
+    assert peringatan2 and "hari SO" in peringatan2[0], peringatan2
+
+    # Penjualan SESUDAH hari SO, walau tanggalnya berdempetan, tetap dihitung.
+    baris2b, _ = hitung_display(
+        log, mutasi,
+        [["2026-08-11", "GLK", "Gula", "Pack", "50", "50", "Pack", "", "Lunas", "", ""]])
+    assert {b[0]: b for b in baris2b}["Gula"][7] == 50, "sehari sesudah SO harus ikut"
 
     # Belum pernah SO display sama sekali -> kolom Sisa kosong, bukan angka minus besar.
     baris3, peringatan3 = hitung_display([], mutasi, jual)

@@ -3,6 +3,7 @@ import { supabase } from '../lib/supabase'
 import {
   rackProgress, staffActivity, latestEntries, mutasiRingkas, latestMoves,
 } from '../lib/adminStats'
+import { parsePenjualan } from '../lib/parsePenjualan'
 
 const jam = (iso) =>
   iso
@@ -17,6 +18,8 @@ const jam = (iso) =>
 // tapi dua malam berturut-turut gagal pasti kelewat 36 jam.
 const SYNC_STALE_MS = 36 * 3600e3
 const syncStale = (s) => !s || Date.now() - new Date(s.ran_at).getTime() > SYNC_STALE_MS
+
+const rupiah = (n) => 'Rp ' + Math.round(n || 0).toLocaleString('id-ID')
 
 async function fetchAllEntries() {
   const all = []
@@ -80,6 +83,14 @@ export default function Admin() {
   const [syncMsg, setSyncMsg] = useState('')
   const [saldoBusy, setSaldoBusy] = useState(false)
   const [saldoMsg, setSaldoMsg] = useState('')
+
+  // Upload penjualan dua langkah: baca berkas dulu, tampilkan isinya, baru kirim
+  // kalau Sopian setuju. Bukan basa-basi -- kiriman ini MENGGANTI seluruh baris
+  // untuk tanggal yang ada di dalamnya, jadi berkas yang salah pilih bisa
+  // menghapus penjualan sebulan. Angkanya harus kelihatan sebelum ditekan.
+  const [jualSiap, setJualSiap] = useState(null)   // { baris, ringkas, namaFile }
+  const [jualBusy, setJualBusy] = useState(false)
+  const [jualMsg, setJualMsg] = useState('')
 
   async function load() {
     setLoadErr(false)
@@ -228,6 +239,50 @@ export default function Admin() {
     }
   }
 
+  // Berkas dibaca di HP/laptop, bukan dikirim mentah: dari 69 kolom export, yang
+  // dipakai cuma 9. Email karyawan, nomor HP pelanggan, HPP, profit, dan komisi
+  // tidak pernah meninggalkan perangkat ini.
+  async function pilihBerkasJual(e) {
+    const file = e.target.files?.[0]
+    e.target.value = ''            // supaya berkas yang sama bisa dipilih lagi
+    if (!file) return
+    setJualMsg('')
+    setJualSiap(null)
+    setJualBusy(true)
+    try {
+      const buf = new Uint8Array(await file.arrayBuffer())
+      const { baris, ringkas } = parsePenjualan(buf)
+      setJualSiap({ baris, ringkas, namaFile: file.name })
+    } catch (err) {
+      setJualMsg(`err:${err.message || 'Berkas tidak bisa dibaca'}`)
+    } finally {
+      setJualBusy(false)
+    }
+  }
+
+  async function kirimJual() {
+    if (!jualSiap) return
+    setJualBusy(true)
+    setJualMsg('')
+    try {
+      // Satu fungsi = satu transaksi di Postgres: hapus tanggal lama dan isi yang
+      // baru tidak bisa terpisah. Gagal di tengah tidak meninggalkan tanggal kosong.
+      const { data, error } = await supabase.rpc('ganti_penjualan', { p_baris: jualSiap.baris })
+      if (error) {
+        setJualMsg(`err:${error.message}`)
+        return
+      }
+      setJualMsg(
+        `ok:${data.ditulis} baris tersimpan untuk ${data.jumlah_tanggal} tanggal ` +
+        `(${data.tanggal_awal} s/d ${data.tanggal_akhir}). ` +
+        'Tekan "Hitung saldo stok" supaya tab Stok ikut terbarui, atau tunggu jam 03.30.'
+      )
+      setJualSiap(null)
+    } finally {
+      setJualBusy(false)
+    }
+  }
+
   return (
     <>
       {entries !== null && (
@@ -369,10 +424,99 @@ export default function Admin() {
       </div>
 
       <div className="card">
+        <p className="section-title">Penjualan</p>
+        <p className="muted" style={{ marginBottom: 12 }}>
+          Upload export POS <b>Item Penjualan berdasarkan Tanggal</b>. Penjualan mengurangi
+          stok Area Display. Sehari sekali sudah cukup; sekali sebulan pilih rentang sebulan
+          supaya tempo yang sudah dibayar ikut terbarui.
+        </p>
+
+        {!jualSiap && (
+          <label className="secondary" style={{ display: 'inline-block', cursor: 'pointer' }}>
+            {jualBusy ? 'Membaca berkas…' : '\ud83d\udcc4 Pilih berkas export'}
+            <input
+              type="file"
+              accept=".xlsx"
+              disabled={jualBusy}
+              onChange={pilihBerkasJual}
+              style={{ display: 'none' }}
+            />
+          </label>
+        )}
+
+        {jualSiap && (
+          <>
+            <p className="muted" style={{ marginBottom: 6 }}>{jualSiap.namaFile}</p>
+            <div className="rows" style={{ marginBottom: 12 }}>
+              <div className="row">
+                <span className="k">Tanggal</span>
+                <span className="v">
+                  {jualSiap.ringkas.tanggalAwal === jualSiap.ringkas.tanggalAkhir
+                    ? jualSiap.ringkas.tanggalAwal
+                    : `${jualSiap.ringkas.tanggalAwal} s/d ${jualSiap.ringkas.tanggalAkhir}`}
+                </span>
+              </div>
+              <div className="row">
+                <span className="k">Baris penjualan</span>
+                <span className="v">{jualSiap.ringkas.dipakai}</span>
+              </div>
+              <div className="row">
+                <span className="k">Omzet</span>
+                <span className="v">{rupiah(jualSiap.ringkas.omzet)}</span>
+              </div>
+              <div className="row">
+                <span className="k">Belum dibayar (tempo)</span>
+                <span className="v" style={jualSiap.ringkas.piutang ? { color: 'var(--orange)' } : undefined}>
+                  {rupiah(jualSiap.ringkas.piutang)}
+                </span>
+              </div>
+              {jualSiap.ringkas.tanpaSku > 0 && (
+                <div className="row">
+                  <span className="k">Barang tanpa SKU</span>
+                  <span className="v" style={{ color: 'var(--orange)' }}>
+                    {jualSiap.ringkas.tanpaSku} baris
+                  </span>
+                </div>
+              )}
+              {jualSiap.ringkas.tanpaTanggal > 0 && (
+                <div className="row">
+                  <span className="k">Baris tanpa tanggal (dilewat)</span>
+                  <span className="v" style={{ color: 'var(--orange)' }}>
+                    {jualSiap.ringkas.tanpaTanggal}
+                  </span>
+                </div>
+              )}
+            </div>
+            <p className="muted" style={{ marginBottom: 12 }}>
+              Penjualan yang sudah tersimpan untuk tanggal di atas akan <b>diganti</b> oleh isi
+              berkas ini. Tanggal lain tidak disentuh.
+            </p>
+            <button className="primary" disabled={jualBusy} onClick={kirimJual}>
+              {jualBusy ? 'Menyimpan…' : 'Simpan penjualan'}
+            </button>
+            <button
+              className="secondary"
+              disabled={jualBusy}
+              style={{ marginTop: 8 }}
+              onClick={() => { setJualSiap(null); setJualMsg('') }}
+            >
+              Batal
+            </button>
+          </>
+        )}
+
+        {jualMsg && (
+          <p className={jualMsg.startsWith('ok:') ? 'ok' : 'error'} style={{ marginTop: 12 }}>
+            {jualMsg.slice(jualMsg.indexOf(':') + 1)}
+          </p>
+        )}
+      </div>
+
+      <div className="card">
         <p className="section-title">Stok</p>
         <p className="muted" style={{ marginBottom: 12 }}>
-          Hitung ulang sisa stok tiap gudang dan Area Display, lalu tulis ke tab Stok Gudang,
-          Stok Display, dan Arsip Saldo. Berjalan sendiri tiap malam jam 03.30.
+          Hitung ulang sisa stok tiap gudang dan Area Display, lalu tulis ke tab Stok dan
+          Selisih SO. Berjalan sendiri tiap malam jam 03.30.
         </p>
         {saldoMsg && (
           <p className={saldoMsg.startsWith('ok:') ? 'ok' : 'error'}>{saldoMsg.slice(saldoMsg.indexOf(':') + 1)}</p>

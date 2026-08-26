@@ -101,12 +101,56 @@ BARIS = [
     ("Nilai barang kurang", '=IFERROR(-SUMIF(\'Selisih SO\'!J3:J;"<0");0)'),
     ("Nilai barang lebih", '=IFERROR(SUMIF(\'Selisih SO\'!J3:J;">0");0)'),
     ("Selisih", '=IFERROR(\'Selisih SO\'!A1;"belum pernah dihitung")'),
+    None,
+
+    # Ditaruh PALING BAWAH, seperti KERUGIAN BARANG dulu: menyisipkan blok di
+    # tengah menggeser nomor baris semua blok sesudahnya, dan format rupiah dari
+    # susunan lama nyangkut di baris yang artinya sudah berubah (`Worksheet.clear()`
+    # cuma menghapus ISI, bukan FORMAT -- pernah bikin "3 produk" tampil "Rp 3").
+    #
+    # Kolom tab Penjualan: A Tanggal, B SKU, C Produk, D Satuan, E Qty,
+    #                      F Qty Dasar, G Satuan Dasar, H Omzet, I Bayar,
+    #                      J Pelanggan, K Sebab
+    ("#", "PENJUALAN & PIUTANG"),
+    ("Penjualan terakhir tercatat",
+     '=IFERROR(INDEX(SORT(FILTER(Penjualan!A2:A;Penjualan!A2:A<>"");1;FALSE);1);'
+     '"belum ada penjualan diupload")'),
+    ("Omzet bulan ini",
+     '=IFERROR(SUMIF(Penjualan!A2:A;TEXT(TODAY();"yyyy-mm")&"*";Penjualan!H2:H);0)'),
+    ("Piutang belum dibayar",
+     '=IFERROR(SUMIF(Penjualan!I2:I;"Tempo";Penjualan!H2:H);0)'),
+    # COUNTUNIQUEIFS, BUKAN COUNTUNIQUE(FILTER(...)). Yang kedua melaporkan **1**
+    # waktu tab Penjualan masih kosong -- sel kosong hasil FILTER ikut terhitung
+    # sebagai satu nilai unik, dan IFERROR tidak menangkapnya karena tidak ada
+    # galat. Diuji langsung di sheet 2026-08-26: kosong -> 1 (salah) lawan 0 (benar),
+    # terisi dua pelanggan -> dua-duanya 2. Syarat `"?*"` membuang nama kosong.
+    ("Pelanggan yang nunggak",
+     '=IFERROR(COUNTUNIQUEIFS(Penjualan!J2:J;Penjualan!I2:I;"Tempo";'
+     'Penjualan!J2:J;"?*");0)'),
+    # Baris ber-Sebab = penjualan yang TIDAK bisa dicocokkan ke master, jadi tidak
+    # ikut mengurangi stok display. Ditampilkan supaya kelihatan, bukan dibuang:
+    # kalau angkanya besar, sisa display kelihatan lebih banyak daripada kenyataan.
+    ("Penjualan tak cocok ke master",
+     '=IFERROR(COUNTIF(Penjualan!K2:K;"?*");0)'),
+    ("Nilainya",
+     '=IFERROR(SUMIF(Penjualan!K2:K;"?*";Penjualan!H2:H);0)'),
 ]
 
-# Baris yang isinya rupiah. Nomornya mengikuti urutan BARIS di atas: B8 gudang,
-# B9 display, B10 jumlah, B16 nilai display minus, B22 nilai lewat ED, B33 kerugian
-# bulan ini, B34 kerugian seluruhnya, B38 barang kurang, B39 barang lebih.
-RUPIAH = ["B8", "B9", "B10", "B16", "B22", "B33", "B34", "B38", "B39"]
+# Baris yang isinya rupiah, DIHITUNG dari daftar BARIS -- dulu nomornya ditulis
+# tangan ("B8", "B9", ...) dan itu bom waktu: menambah satu baris di tengah
+# menggeser semuanya, sedangkan `Worksheet.clear()` tidak menghapus FORMAT, jadi
+# pola rupiah lama nyangkut di baris yang sekarang berisi hitungan biasa dan
+# "3 produk" tampil sebagai "Rp 3". Sekarang label yang jadi patokan, bukan nomor.
+LABEL_RUPIAH = {
+    "Gudang", "Area Display", "Jumlah",
+    "Nilai display minus",
+    "Nilai yang sudah lewat",
+    "Nilai kerugian bulan ini", "Nilai kerugian seluruhnya",
+    "Nilai barang kurang", "Nilai barang lebih",
+    "Omzet bulan ini", "Piutang belum dibayar", "Nilainya",
+}
+RUPIAH = [f"B{i + 1}" for i, b in enumerate(BARIS)
+          if b and b[0] in LABEL_RUPIAH]
 
 BLOK = [
     ("D1", "PROGRES SO PER LOKASI",
@@ -121,6 +165,12 @@ BLOK = [
      'group by A order by A '
      'label A \'Lokasi\', count(B) \'Jumlah SKU\', sum(L) \'Nilai HPP\'";0);'
      '"belum ada stok — jalankan hitung saldo")'),
+    ("S1", "PIUTANG PER PELANGGAN",
+     '=IFERROR(QUERY(Penjualan!A2:K;'
+     '"select J, sum(H), max(A) where I = \'Tempo\' and J is not null and J <> \'\' '
+     'group by J order by sum(H) desc '
+     'label J \'Pelanggan\', sum(H) \'Belum dibayar\', max(A) \'Terakhir\'";0);'
+     '"tidak ada tempo")'),
     ("N1", "10 SELISIH TERBESAR",
      '=IFERROR(QUERY(\'Selisih SO\'!A3:K;'
      '"select D, B, H, J where H is not null order by J asc limit 10 '
