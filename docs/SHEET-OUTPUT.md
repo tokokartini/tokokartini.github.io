@@ -128,15 +128,32 @@ tab itu harus mulai dari `A3`, bukan `A2`.
 Repo privat [`tokokartini/so-kartini-jadwal`](https://github.com/tokokartini/so-kartini-jadwal)
 menjalankan `harga_master.py` → `hitung_stok.py` → `selisih_so.py`.
 
-**Jadwal malamnya masih DIMATIKAN** (baris `schedule` dikomentari sejak 25 Agu
-2026). Waktu itu wajib: ketiga skrip MEMBUAT tabnya kalau belum ada, jadi jadwal
-yang hidup akan memunculkan lagi Harga/Stok/Selisih SO jam 03.30 dan membatalkan
-pengosongan tanpa ada yang sadar.
+**Jadwal malam HIDUP lagi sejak 26 Agu 2026**, `30 20 * * *` UTC = **03.30 WIB**,
+setengah jam sesudah sync produk. Sempat dimatikan 25 Agu karena ketiga skrip
+MEMBUAT tabnya kalau belum ada — jadwal yang hidup akan memunculkan lagi
+Harga/Stok/Selisih SO dan membatalkan pengosongan sheet tanpa ada yang sadar.
+**Kalau sheet dikosongkan lagi, matikan jadwal ini duluan.**
 
-**Alasan itu sudah tidak berlaku sejak 26 Agu** — ketiga tab itu sekarang memang
-dipakai. Menghidupkan lagi tinggal membuang komentar `schedule` di workflow repo
-`so-kartini-jadwal`. Selama masih mati, tab Stok dan Selisih SO **tidak menyegarkan
-diri**; baris 1-nya akan berbunyi `⚠ ANGKA LAMA` sehari sesudah dihitung.
+### Google kadang balas 503
+
+26 Agu 2026 sheet **Master Pricelist** membalas `APIError: [503]: The service is
+currently unavailable.` untuk 2 dari 3 percobaan, sementara sheet SO di detik yang
+sama sehat — jadi bukan kunci, izin, atau jaringan. Dua run workflow gagal
+berturut-turut karena ini, dan karena `harga_master.py` langkah PERTAMA, satu 503
+mematikan seluruh hitungan malam itu tanpa ada yang menonton Actions jam 03.30.
+
+`scripts/google_ulang.py` membungkus `gspread.http_client.HTTPClient.request`:
+ulang sampai 5 kali, jeda berlipat + jitter, untuk status 429/500/502/503/504.
+Sudah dipasang di `harga_master.py`, `hitung_stok.py`, `selisih_so.py`.
+
+**Yang sengaja TIDAK diulang**: 4xx lain (penolakan tetap — izin, id salah), dan
+permintaan `addSheet` / `append` yang tidak idempoten, karena kalau permintaan
+pertama ternyata mendarat lalu jawabannya yang hilang, ulangan bikin tab kembar
+atau baris dobel. Sisanya aman diulang: skrip di sini selalu menulis ke rentang
+tetap, jadi menulis hal yang sama dua kali hasilnya sama.
+
+Kalau di log muncul `Google balas 503, ulang ke-2 sesudah 3.1 detik` lalu jobnya
+sukses — itu tambalan ini bekerja, bukan masalah baru.
 
 Manual, tiga jalan:
 
