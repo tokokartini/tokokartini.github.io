@@ -4,7 +4,7 @@ Sheet id `1uP2ntR00nrstLXKTuCYw1IzWDKohQAKsaq3qeeApDgw`, milik Sopian, dishare k
 service account `point-coffee@claude-code-powershel.iam.gserviceaccount.com`.
 Locale `in_ID`, jadi formula pakai `;` dan `\`. Zona Asia/Jakarta.
 
-## Keadaan sekarang: 12 tab
+## Keadaan sekarang: 13 tab
 
 Dikosongkan jadi 4 tab **25 Agustus 2026 sore** atas permintaan Sopian ("udah
 pusing kemana-mana"): enam tab dibuat dalam sehari, dua langsung dibuang, sisanya
@@ -21,13 +21,14 @@ Urutan tabnya menurut cara pakai: yang dibaca di depan, sumber mentah di belakan
 | 3 | **Stok** | `hitung_stok.py` | sisa semua lokasi, gudang dan Area Display jadi satu tabel |
 | 4 | **Stok per Gudang** | formula | tabel silang: barang jadi baris, gudang jadi kolom |
 | 5 | **Selisih SO** | `selisih_so.py` | perkiraan lawan hitungan fisik tiap SO |
-| 6 | **Barang Rusak** | formula | yang hangus + nilainya, dikelompokkan per sebab |
-| 7 | **Kadaluarsa** | formula | barang mendekati ED, terdekat di atas |
-| 8 | **Arsip Harian** | formula | hasil akhir SO per tanggal + SKU, satuan terkecil |
-| 9 | **Riwayat SO** | formula | hasil SO tiap bulan, bulan terakhir dipecah per gudang |
-| 10 | **Log** | Edge Function `upload-rak` | sumber: hasil SO mentah |
-| 11 | **Mutasi** | Edge Function `upload-mutasi` | sumber: barang datang / isi ulang / pindah / rusak |
-| 12 | **Harga** | `harga_master.py` | HPP + harga jual per SKU dari Master Pricelist |
+| 6 | **Barang Masuk** | formula | kiriman supplier + siapa yang bawa, dari Mutasi jenis Datang |
+| 7 | **Barang Rusak** | formula | yang hangus + nilainya, dikelompokkan per sebab |
+| 8 | **Kadaluarsa** | formula | barang mendekati ED, terdekat di atas |
+| 9 | **Arsip Harian** | formula | hasil akhir SO per tanggal + SKU, satuan terkecil |
+| 10 | **Riwayat SO** | formula | hasil SO tiap bulan, bulan terakhir dipecah per gudang |
+| 11 | **Log** | Edge Function `upload-rak` | sumber: hasil SO mentah |
+| 12 | **Mutasi** | Edge Function `upload-mutasi` | sumber: barang datang / isi ulang / pindah / rusak |
+| 13 | **Harga** | `harga_master.py` | HPP + harga jual per SKU dari Master Pricelist |
 
 **Tab `Mutasi` tidak boleh dihapus** — Edge Function `upload-mutasi` menulis ke
 situ; tanpa tabnya, menu Pengeluaran di aplikasi langsung gagal.
@@ -45,6 +46,7 @@ MASTER PRICELIST ─────────────────►  Harga
                           Stok ───►  Stok per Gudang  tabel silang
   Log + Mutasi + Harga ───────────►  Selisih SO       perkiraan lawan hitungan fisik
   Log kolom ED + Harga ───────────►  Kadaluarsa
+  Mutasi jenis Datang ────────────►  Barang Masuk
   Mutasi jenis Rusak + Harga ─────►  Barang Rusak
   Log ────────────────────────────►  Arsip Harian, Riwayat SO
 
@@ -63,7 +65,7 @@ Sisa boleh MINUS. Itu alarm mutasi yang lupa dicatat — jangan dipaksa jadi 0.
 
 ```
 harga_master.py  →  hitung_stok.py  →  add_stok_gudang.py  →  selisih_so.py
-                 →  add_kadaluarsa.py  →  add_barang_rusak.py
+                 →  add_kadaluarsa.py  →  add_barang_masuk.py  →  add_barang_rusak.py
                  →  add_ringkasan.py  →  add_cari_barang.py
 ```
 
@@ -92,10 +94,8 @@ harus dicek.
 
 | Tab | Dibangun oleh | Isinya | Kenapa ditahan |
 |---|---|---|---|
-| **Barang Masuk** | `add_barang_masuk.py` | kiriman supplier, dari Mutasi jenis Datang | cuma saringan tab Mutasi; pasang kalau Sopian sering menyisir kiriman |
 | **Penjualan** | `import_penjualan.py <export.xlsx>` | penjualan POS per periode | POS Olsera mau habis, katalog baru belum jadi |
 | **Peta Satuan Olsera** | `peta_satuan.py <export.xlsx>` | terjemahan satuan POS → master | dihapus 25 Agu; tak perlu lagi kalau katalog POS baru menyalin satuan master persis |
-| **Stok per Gudang (pivot lama)** | — | — | sudah terpasang, lihat tabel di atas |
 
 Tanpa tab `Penjualan`, kolom **Terjual** di tab Stok untuk Area Display selalu 0 —
 `hitung_stok.py` melewatinya dengan pesan `Tab 'Penjualan' belum ada — dilewat.`
