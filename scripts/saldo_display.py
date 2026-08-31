@@ -39,6 +39,7 @@ import sys
 from collections import defaultdict
 
 import harga_lookup
+import sesi_so
 
 KOL_SEBAB = 10   # tab Penjualan: kolom Sebab. Terisi = gagal dikonversi.
 DISPLAY = "Area Display"
@@ -68,10 +69,18 @@ def hitung_display(log_rows, mutasi_rows, jual_rows, harga_rows=()):
     """
     # Waktu SO display terakhir. Timestamp penuh, sama seperti hitung_saldo.py.
     waktu_so = ""
+    tanggal_display = set()
     for r in log_rows:
-        if _kolom(r, 2) == DISPLAY and _kolom(r, 0) > waktu_so:
+        if _kolom(r, 2) != DISPLAY:
+            continue
+        if _kolom(r, 0) > waktu_so:
             waktu_so = _kolom(r, 0)
+        if _kolom(r, 0):
+            tanggal_display.add(_kolom(r, 0)[:10])
+    # Display sebesar toko ini bisa habis dua hari; hari bersambung = satu SO.
+    sesi = sesi_so.terakhir(tanggal_display)
     tgl_so = waktu_so[:10]
+    tgl_mulai = min(sesi) if sesi else ""
 
     baseline = defaultdict(float)
     masuk = defaultdict(float)
@@ -88,8 +97,8 @@ def hitung_display(log_rows, mutasi_rows, jual_rows, harga_rows=()):
             continue
         sku.setdefault(produk, _kolom(r, 8))
         satuan.setdefault(produk, _kolom(r, 6))
-        # Hanya hitungan dari hari SO terakhir yang jadi titik awal.
-        if _kolom(r, 0)[:10] == tgl_so:
+        # Hanya hitungan dari SESI SO terakhir yang jadi titik awal.
+        if _kolom(r, 0)[:10] in sesi:
             baseline[produk] += _angka(_kolom(r, 5))
 
     for r in mutasi_rows:
@@ -128,10 +137,10 @@ def hitung_display(log_rows, mutasi_rows, jual_rows, harga_rows=()):
             continue          # ada Sebab = gagal dikonversi, jangan dihitung
         satuan.setdefault(produk, _kolom(r, 6))
         if hari_so:
-            if tgl < hari_so:
+            if tgl < tgl_mulai:
                 continue                  # sebelum SO, sudah tercermin di hitungan fisik
-            if tgl == hari_so:
-                sehari.add(produk)        # hari SO itu sendiri: tidak bisa dipisah
+            if tgl <= hari_so:
+                sehari.add(produk)        # hari-hari SO itu sendiri: tidak bisa dipisah
                 continue
         terjual[produk] += _angka(_kolom(r, 5))
 
@@ -287,6 +296,17 @@ def uji():
     dgn2 = {b[0]: b for b in hitung_display(log, mutasi, jual,
             harga + [["KPS", "Kopi Saset", "Pcs", 1, 2000, 3000, "HJ3", "X"]])[0]}
     assert dgn2["Kopi Saset"][10] == -16000, f"nilai sisa minus salah: {dgn2['Kopi Saset']}"
+
+    # SO display dua hari bersambung = satu sesi; hari pertama tidak boleh hilang.
+    log_dua = [
+        ["2026-08-30 20:00:00", "ichan", "Area Display", "Gula", "", "20", "Pack", "", "GLK"],
+        ["2026-08-31 19:00:00", "dewo", "Area Display", "Ceres", "", "5", "Pcs", "", "CRS"],
+    ]
+    bd, _ = hitung_display(log_dua, [], [])
+    perd = {b[0]: b for b in bd}
+    assert perd["Gula"][3] == 20, f"hari pertama sesi display hilang: {perd['Gula']}"
+    assert perd["Ceres"][3] == 5, perd["Ceres"]
+    assert perd["Gula"][4] == "2026-08-31", f"Tgl SO = hari selesai: {perd['Gula']}"
 
     print("semua uji hitung_display LOLOS")
 

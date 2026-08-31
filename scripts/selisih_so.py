@@ -39,6 +39,7 @@ import google_ulang
 from collections import defaultdict
 
 import harga_lookup
+import sesi_so
 
 TAB = "Selisih SO"
 # Sama seperti tab Stok: baris 1 memperingatkan sendiri kalau angkanya sudah lewat
@@ -55,15 +56,31 @@ JUDUL = ["Tgl SO", "Lokasi", "SKU", "Produk", "Satuan", "Perkiraan", "Hasil Hitu
 
 def hitung_selisih(log_rows, mutasi_rows, harga_rows=()):
     """Kembalikan (baris, cocok) — baris selisih bukan-nol, dan berapa yang cocok."""
-    # Kelompokkan SO per lokasi lalu per tanggal. Satu SO = satu tanggal di satu rak;
-    # waktu penuh dipakai untuk memotong jendela mutasi.
-    so = defaultdict(lambda: defaultdict(lambda: {"qty": defaultdict(float), "akhir": ""}))
+    # Kelompokkan SO per lokasi lalu per SESI, bukan per tanggal: rak besar sering
+    # dihitung dua hari bersambung, dan membandingkan hari kedua dengan hari
+    # pertama membuat tiap barang yang belum sempat dihitung kemarin terbaca
+    # sebagai "barang lebih". Waktu penuh tetap dipakai memotong jendela mutasi.
+    tanggal_rak = defaultdict(set)
+    for r in log_rows:
+        waktu, rak = _k(r, 0), _k(r, 2)
+        if waktu and rak:
+            tanggal_rak[rak].add(waktu[:10])
+    peta_sesi = {}                      # (rak, tanggal) -> tanggal mulai sesinya
+    for rak, tgls in tanggal_rak.items():
+        for satu in sesi_so.kelompok(tgls):
+            for t in satu:
+                peta_sesi[(rak, t)] = satu[0]
+
+    so = defaultdict(lambda: defaultdict(
+        lambda: {"qty": defaultdict(float), "akhir": "", "mulai": ""}))
     nama, satuan = {}, {}
     for r in log_rows:
         waktu, rak, sku = _k(r, 0), _k(r, 2), _k(r, 8)
         if not waktu or not rak or not sku:
             continue
-        hari = so[rak][waktu[:10]]
+        kunci = peta_sesi.get((rak, waktu[:10]), waktu[:10])
+        hari = so[rak][kunci]
+        hari["mulai"] = kunci
         hari["qty"][sku] += _n(_k(r, 5))
         if waktu > hari["akhir"]:
             hari["akhir"] = waktu
@@ -90,13 +107,15 @@ def hitung_selisih(log_rows, mutasi_rows, harga_rows=()):
 
     baris, cocok = [], 0
     for lokasi in sorted(so):
-        tanggal = sorted(so[lokasi])
-        for i, tgl in enumerate(tanggal):
-            ini = so[lokasi][tgl]
-            sebelum = so[lokasi][tanggal[i - 1]] if i else None
+        sesi = sorted(so[lokasi])
+        for i, mulai in enumerate(sesi):
+            ini = so[lokasi][mulai]
+            # Tanggal yang dilaporkan adalah hari SO itu SELESAI.
+            tgl = ini["akhir"][:10]
+            sebelum = so[lokasi][sesi[i - 1]] if i else None
             batas_bawah = sebelum["akhir"] if sebelum else ""
             batas_atas = ini["akhir"]
-            dasar = (f"SO {tanggal[i - 1]}" if sebelum
+            dasar = (f"SO {_rentang(sebelum)}" if sebelum
                      else "SO pertama — perkiraan dari mutasi saja, belum tentu benar")
 
             geser = defaultdict(float)
@@ -130,6 +149,12 @@ def hitung_selisih(log_rows, mutasi_rows, harga_rows=()):
     baris.sort(key=lambda b: (b[0], -abs(float(b[9]) if b[9] != "" else 0)), reverse=False)
     baris.sort(key=lambda b: b[0], reverse=True)
     return baris, cocok
+
+
+def _rentang(sesi):
+    """Tulis sesi SO sebagai satu tanggal, atau rentang kalau memakan beberapa hari."""
+    mulai, akhir = sesi["mulai"], sesi["akhir"][:10]
+    return mulai if mulai == akhir else f"{mulai}..{akhir}"
 
 
 def _k(baris, i):
@@ -207,6 +232,30 @@ def uji():
     ga = [x for x in b5 if x[1] == "Gudang A"][0]
     # Gudang A mengirim 22 keluar sebelum SO-nya -> perkiraan -22, dihitung 100.
     assert ga[5] == -22 and ga[7] == 122, f"lokasi tercampur: {ga}"
+
+    # SO yang memakan dua hari BERSAMBUNG itu satu sesi, bukan dua SO. Kalau
+    # dipecah, tiap barang yang belum sempat dihitung hari pertama muncul sebagai
+    # "barang lebih" dan yang sudah dihitung muncul sebagai "hilang".
+    log6 = [
+        ["2026-08-29 18:00:00", "dewo", "Gudang A", "Gula", "", "10", "Pack", "", "GLK"],
+        ["2026-08-30 09:00:00", "dewo", "Gudang A", "Ceres", "", "4", "Pcs", "", "CRS"],
+    ]
+    b6, _ = hitung_selisih(log6, [], harga)
+    assert {x[2] for x in b6} == {"GLK", "CRS"}, f"kedua hari harus ikut: {b6}"
+    assert all(x[0] == "2026-08-30" for x in b6), f"tanggal sesi = hari selesai: {b6}"
+    assert all("SO pertama" in x[10] for x in b6), \
+        f"hari kedua tidak boleh dibandingkan dengan hari pertama: {b6}"
+    assert [x for x in b6 if x[2] == "GLK"][0][6] == 10, f"hasil hari pertama hilang: {b6}"
+
+    # SO berikutnya membandingkan diri dengan SELURUH sesi sebelumnya, dan kolom
+    # Dasar menyebut rentangnya.
+    log7 = log6 + [["2026-09-05 09:00:00", "dewo", "Gudang A", "Gula", "", "10", "Pack", "", "GLK"]]
+    b7, cocok7 = hitung_selisih(log7, [], harga)
+    baru = [x for x in b7 if x[0] == "2026-09-05"]
+    assert cocok7 >= 1, "Gula 10 lawan 10 harus terhitung cocok"
+    crs = [x for x in baru if x[2] == "CRS"][0]
+    assert crs[5] == 4 and crs[6] == 0 and crs[7] == -4, f"Ceres sesi lalu jadi pembanding: {crs}"
+    assert crs[10] == "SO 2026-08-29..2026-08-30", f"dasar harus menyebut rentang sesi: {crs}"
 
     print("semua uji selisih_so LOLOS")
 

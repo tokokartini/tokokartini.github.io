@@ -24,6 +24,7 @@ import sys
 from collections import defaultdict
 
 import harga_lookup
+import sesi_so
 
 # --- Bagian murni: bisa diuji tanpa jaringan -------------------------------
 
@@ -49,18 +50,24 @@ def hitung_saldo(log_rows, mutasi_rows, lokasi_aktif, harga_rows=()):
     """
     # Waktu SO terakhir per lokasi + hasil hitungannya per SKU.
     waktu_so = {}
+    tanggal_rak = defaultdict(set)
     for r in log_rows:
         waktu, rak = _kolom(r, 0), _kolom(r, 2)
         if not waktu or not rak:
             continue
         if waktu > waktu_so.get(rak, ""):
             waktu_so[rak] = waktu
+        tanggal_rak[rak].add(waktu[:10])
+
+    # Titik awalnya adalah SESI SO terakhir, bukan HARI terakhir: satu rak besar
+    # sering dihitung dua hari bersambung, dan aturan lama membuang hari pertama.
+    sesi_akhir = {rak: sesi_so.terakhir(tgl) for rak, tgl in tanggal_rak.items()}
 
     baseline = defaultdict(float)   # (lokasi, sku) -> qty saat SO
     nama = {}                       # sku -> (produk, satuan)
     for r in log_rows:
         waktu, rak, sku = _kolom(r, 0), _kolom(r, 2), _kolom(r, 8)
-        if not sku or not rak or waktu[:10] != waktu_so.get(rak, "")[:10]:
+        if not sku or not rak or waktu[:10] not in sesi_akhir.get(rak, ()):
             continue
         baseline[(rak, sku)] += _angka(_kolom(r, 5))
         nama.setdefault(sku, (_kolom(r, 3), _kolom(r, 6)))
@@ -156,6 +163,21 @@ def uji():
     assert mika[8] == 30, f"sisa lokasi tanpa SO salah: {mika}"
 
     assert not any(b[0] == DISPLAY for b in hitung_saldo(log, mutasi, lokasi)), "display tidak boleh ikut"
+
+    # SO yang memakan dua hari BERSAMBUNG itu satu sesi -- hari pertama tidak
+    # boleh hilang. Ini yang dulu membuang 186 dari 326 baris Gudang Packaging.
+    log_dua_hari = [
+        ["2026-08-29 18:00:00", "dewo", "Gudang Packaging", "Mika", "", "600", "Pcs", "", "MKA"],
+        ["2026-08-30 09:00:00", "dewo", "Gudang Packaging", "Sedotan", "", "40", "Pack", "", "SDT"],
+        # produk sama, rak sama, hari sama, dua penghitung -> DIJUMLAH
+        ["2026-08-30 10:00:00", "sofyan", "Gudang Packaging", "Sedotan", "", "10", "Pack", "", "SDT"],
+    ]
+    dua = {(b[0], b[1]): b for b in hitung_saldo(log_dua_hari, [], {"Gudang Packaging"})}
+    assert dua[("Gudang Packaging", "MKA")][4] == 600, \
+        f"hari pertama sesi ikut terhitung: {dua[('Gudang Packaging', 'MKA')]}"
+    assert dua[("Gudang Packaging", "SDT")][4] == 50, \
+        f"hitungan kembar di hari sama harus dijumlah: {dua[('Gudang Packaging', 'SDT')]}"
+
 
     # Tanpa tab Harga kolom HPP/Nilai kosong, tapi hitungan qty tetap jalan.
     assert gula[9] == "" and gula[10] == "", f"tanpa harga harus kosong: {gula}"

@@ -97,9 +97,17 @@ BARIS = [
 
     # Tab Selisih SO juga baris 1 penanda, 2 judul, data mulai 3.
     ("#", "SELISIH SO"),
-    ("Produk yang selisih", '=IFERROR(COUNT(\'Selisih SO\'!H3:H);0)'),
-    ("Nilai barang kurang", '=IFERROR(-SUMIF(\'Selisih SO\'!J3:J;"<0");0)'),
-    ("Nilai barang lebih", '=IFERROR(SUMIF(\'Selisih SO\'!J3:J;">0");0)'),
+    # Baris "SO pertama" sengaja TIDAK ikut dijumlah: lokasi yang baru pertama
+    # dihitung tidak punya titik awal, jadi seluruh isinya terbaca sebagai "barang
+    # lebih" dan angka rupiahnya cuma nilai stok yang dihitung ulang, bukan selisih
+    # sungguhan. Jumlahnya tetap dilaporkan sendiri di baris di bawahnya.
+    ("Produk yang selisih", '=IFERROR(COUNTIFS(\'Selisih SO\'!H3:H;"<>";'
+                            '\'Selisih SO\'!K3:K;"<>SO pertama*");0)'),
+    ("Nilai barang kurang", '=IFERROR(-SUMIFS(\'Selisih SO\'!J3:J;\'Selisih SO\'!J3:J;"<0";'
+                            '\'Selisih SO\'!K3:K;"<>SO pertama*");0)'),
+    ("Nilai barang lebih", '=IFERROR(SUMIFS(\'Selisih SO\'!J3:J;\'Selisih SO\'!J3:J;">0";'
+                           '\'Selisih SO\'!K3:K;"<>SO pertama*");0)'),
+    ("Belum ada pembanding (SO pertama)", '=IFERROR(COUNTIF(\'Selisih SO\'!K3:K;"SO pertama*");0)'),
     ("Selisih", '=IFERROR(\'Selisih SO\'!A1;"belum pernah dihitung")'),
     None,
 
@@ -173,7 +181,8 @@ BLOK = [
      '"tidak ada tempo")'),
     ("N1", "10 SELISIH TERBESAR",
      '=IFERROR(QUERY(\'Selisih SO\'!A3:K;'
-     '"select D, B, H, J where H is not null order by J asc limit 10 '
+     '"select D, B, H, J where H is not null and not K starts with \'SO pertama\' '
+     'order by J asc limit 10 '
      'label D \'Produk\', B \'Lokasi\', H \'Selisih\', J \'Nilai\'";0);'
      '"tidak ada selisih")'),
 ]
